@@ -1,6 +1,11 @@
 # Node modules
 node_modules/
 
+# Environment variables (database password, JWT secret)
+.env
+.env.*
+!.env.example
+
 # Logs
 logs/
 *.log
