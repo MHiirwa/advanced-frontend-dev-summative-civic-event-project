@@ -1,1 +1,192 @@
-# UI Implementation
+# CivicEvents+ frontend
+
+CivicEvents+ is a community portal for local **events**, **audio announcements**,
+**promo videos** and **in-app notifications**. This folder is the frontend: plain
+HTML, Tailwind CSS (CDN), jQuery and Chart.js (CDN). It has no build step and no
+framework. It talks to the provided Express + PostgreSQL API in [`../backend`](../backend).
+
+There are two roles:
+
+| Role | Can do |
+|------|--------|
+| **user** | Browse published events, announcements and promos; register for and cancel events; leave and edit one feedback entry per event; read notifications; edit their own name and email. |
+| **admin** | Everything above, plus: create, edit and delete events, announcements and promos; publish or unpublish announcements and promos; see registrants and all feedback per event; enable or disable users; delete notifications; view the dashboard with charts. |
+
+---
+
+## 1. Run it locally
+
+### 1.1 Start the backend first
+
+Follow [`backend/README.md`](../backend/README.md). In short:
+
+```bash
+cd backend
+npm install
+# create the PostgreSQL database, then create your env file from the template:
+cp .env.example .env   # fill in DB_USER, DB_PASS + DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, JWT_SECRET
+                       # (.env is git-ignored; optional PORT, default 4000)
+npm run db:setup     # creates the tables (migrations/001_create_tables.sql)
+npm run dev          # API on http://localhost:4000/api, uploads on http://localhost:4000/uploads
+```
+
+### 1.2 Serve the frontend with VS Code Live Server
+
+The frontend must be served over HTTP (not opened as `file://`), because it
+loads scripts by relative path and calls the API with `fetch`/XHR.
+
+1. Install the VS Code extension **Live Server** (Ritwick Dey).
+2. Open the **repository root** in VS Code. The included `.vscode/settings.json`
+   sets Live Server's root to `/frontend` and its start file to `index.html`.
+3. Click **Go Live** in the status bar, or right-click `frontend/index.html` and
+   choose **Open with Live Server**.
+4. The browser opens the public home page (usually `http://127.0.0.1:5500/index.html`).
+   Use **Log in** or **Sign up** from there.
+
+Any static server works too, for example `cd frontend && python3 -m http.server 5500`.
+
+### 1.3 Point the frontend at the backend (base URL)
+
+The API address is set in one place, [`js/core/config.js`](js/core/config.js):
+
+```js
+window.CONFIG = {
+  API_BASE_URL: 'http://localhost:4000', // where the backend runs
+  API_PREFIX: '/api',                    // every request goes to API_BASE_URL + API_PREFIX
+  ...
+};
+```
+
+If your backend runs on another host or port (for example `PORT=5000` in
+`backend/.env`), change `API_BASE_URL` only. There are no frontend environment
+variables. The backend already enables CORS, so no proxy is needed.
+
+### 1.4 Create an admin account
+
+The sign-up page always creates a normal **user**. The backend's signup endpoint
+also accepts a `role` field, so create an admin from Postman (or curl):
+
+```http
+POST http://localhost:4000/api/auth/signup
+Content-Type: application/json
+
+{
+  "full_name": "Site Admin",
+  "email": "admin@example.com",
+  "password": "Admin#2026",
+  "role": "admin"
+}
+```
+
+Then log in with that email and password on `login.html`. Admins land on
+`admin/dashboard.html`; users land on `pages/dashboard.html`.
+
+The Postman collection is in `backend/CivicEvents+ API.postman_collection.json`.
+
+---
+
+## 2. Folder structure
+
+```
+frontend/
+├── index.html, login.html, signup.html   public pages (no login needed)
+├── dashboard.html, events.html            tiny redirects to the real pages
+├── pages/                                 signed-in pages, for any role
+│   ├── dashboard.html                     personal dashboard
+│   ├── events.html, event-details.html
+│   ├── announcements.html, announcement-details.html
+│   ├── promos.html, promo-details.html
+│   ├── my-registrations.html, my-feedback.html
+│   ├── notifications.html, profile.html, search.html
+├── admin/                                 admin-only pages (<body data-access="admin">)
+│   ├── dashboard.html                     stats + charts
+│   ├── events.html, announcements.html, promos.html            manage lists
+│   ├── create-event.html, create-announcement.html, create-promo.html   create/edit (?id=…)
+│   ├── users.html, registrations.html, notifications.html
+├── css/styles.css                         design tokens and shared component styles
+└── js/
+    ├── core/          loaded on every page
+    │   ├── config.js            API base URL, upload limits, poll interval
+    │   ├── tailwind-config.js   Tailwind theme (brand colours, fonts)
+    │   ├── ui.js                escape(), toasts, skeletons, empty/error states, confirm dialog
+    │   ├── auth.js              token storage, role helpers, GUARDS 1–3
+    │   └── api.js               $.ajax wrapper: Bearer header, 401/403 handling, cache, upload progress
+    ├── shared/        used by every signed-in page
+    │   ├── layout.js            header (nav, search, bell, profile menu, admin menu) + footer
+    │   ├── notifications.js     bell badge, notification drawer, per-user read state
+    │   ├── components.js        cards, tables, pagination, audio player, captions helper
+    │   └── app.js               page setup (boot), error/retry, list helpers, page router
+    ├── features/      one file per feature; each page loads only the one it needs
+    │   ├── events.js            events list (filters + pagination) and event detail
+    │   ├── announcements.js     announcements list and detail
+    │   ├── promos.js            promos list and detail
+    │   ├── registrations.js     my registrations, my feedback, admin registrations
+    │   ├── notifications.js     notifications page (admin delete)
+    │   ├── users.js             my profile, admin user management
+    │   ├── dashboard.js         admin dashboard (Chart.js) and personal dashboard
+    │   ├── admin-content.js     admin manage lists + create/edit form for all content
+    │   └── search.js            global search results
+    └── pages/         scripts for the public pages
+        ├── home.js, login.js, signup.js
+```
+
+**How a signed-in page works.** Each HTML file is a thin shell, for example
+`<body data-page="events">`, plus its scripts: `core/*` → `shared/*` →
+`shared/app.js` → one `features/*.js`. The feature file registers its pages with
+`App.register({ 'events': events, ... })`. On DOM ready, `app.js` runs the handler
+whose name matches `data-page`. That handler calls `App.boot()`, which draws the
+layout and runs the access guard, and then renders the content.
+
+---
+
+## 3. Where the role guards are
+
+**The frontend guards are for user experience only. Real security is the backend,**
+which checks the JWT and the role on every protected endpoint
+(`authenticate` / `authorize(['admin'])`). Every guard in the code has a
+`ROLE GUARD` or `GUARD n` comment saying who can access it and why.
+
+| Guard | Where | What it does |
+|-------|-------|--------------|
+| **GUARD 1: signed in** | `Auth.requireAuth()` in [`js/core/auth.js`](js/core/auth.js), called by `Layout.init()` | No token or an expired token → redirect to `login.html` with a message. |
+| **GUARD 2: admin page** | `Auth.requireAdmin()` in `auth.js`, called by `Layout.init({ access: 'admin' })` | Every page in `admin/` has `data-access="admin"`. `App.boot()` passes that to `Layout.init`, and normal users see a "You don't have access" screen with a "Contact an admin" link. |
+| **GUARD 3: element visibility** | `Auth.applyRoleVisibility()` in `auth.js`, run on the header by `layout.js` | Removes `data-role="admin"` elements for users (Dashboard link, Admin menu) and `data-role="user"` elements for admins (My registrations, My feedback). |
+| **Admin controls on cards** | `C.manageActions()` and the `admin` argument of `C.eventCard / announcementCard / promoCard` in [`js/shared/components.js`](js/shared/components.js) | Edit/Delete/Publish buttons only render on `admin/` pages. |
+| **Published-only content** | `App.showList()` / `App.mediaDetail()` in [`js/shared/app.js`](js/shared/app.js), `events.js`, `search.js` | Users never see drafts (`published === false`); admins do. |
+| **Event detail blocks** | `eventDetail()` in [`js/features/events.js`](js/features/events.js) | Users: Register/Cancel and their own feedback. Admins: registrants, all feedback, average rating. |
+| **Notification delete** | [`js/features/notifications.js`](js/features/notifications.js) | Delete button only on `admin/notifications.html`. |
+| **Profile** | `profile()` in [`js/features/users.js`](js/features/users.js) | Only `full_name` and `email` are editable; role and status are read-only. |
+| **User management** | `adminUsers()` in `users.js` | Admins can enable or disable users; there is deliberately no role control. |
+| **Landing page by role** | `Auth.homeFor()` in `auth.js` | Admins go to the admin dashboard, users to their personal dashboard. |
+
+**Token handling** ([`js/core/auth.js`](js/core/auth.js), [`js/core/api.js`](js/core/api.js)):
+the JWT and `{ id, full_name, email, role }` are kept in `sessionStorage`, so the
+session ends when the tab closes. The backend tokens expire after one hour, so
+nothing longer-lived is useful, and `localStorage` would leave the token readable
+after the browser closes. `Auth.save(..., remember=true)` exists for a persistent
+`localStorage` session but is not used. Every protected request sends
+`Authorization: Bearer <token>`. An expired token or a 401 response signs the user
+out and redirects to the login page with a message.
+
+---
+
+## 4. Backend limitations (and how the UI handles them)
+
+The UI only uses endpoints that exist. Where the API is missing something, the
+frontend works around it as follows:
+
+| Limitation | What the frontend does |
+|------------|------------------------|
+| **No feedback list for normal users.** `GET /event-feedback/event/:id` is admin-only, so users cannot see other people's feedback or the average rating. | Users see and edit only **their own** feedback (from `GET /event-feedback/my-feedback`). Admins see the full list and an average rating **computed in the browser** (there is no average endpoint). A 409 on duplicate feedback shows a message and switches to edit mode. |
+| **No mark-as-read endpoint for notifications.** | Read state is stored **in `localStorage`, per user id** (`ce_read_<userId>`). It drives the bell's unread count and the bold/unread styling. It does not sync across browsers or devices. |
+| **Events have no `published` field in create/update** (the controller ignores it and there is no publish endpoint). | Event forms have **no published toggle**; they explain that events are visible as soon as they are saved. Announcements and promos do have a toggle (see below). |
+| **Re-registering after cancelling returns 409.** Cancelling sets the registration's status to `cancelled`, and the unique `(user_id, event_id)` constraint blocks a new row. | Once a user has cancelled, the event page shows a note that re-registering is not available, instead of a Register button that would fail. A 409 on Register shows a toast and reloads the state. |
+| No search, filter or pagination query parameters. | Search, date and location filters and pagination run client-side on the cached list. Filter state is kept in the URL. |
+| The API returns drafts to everyone. | Normal users' lists, details and search results filter out `published === false`. |
+| `POST /promos` ignores `published`; `PUT /announcements/:id` ignores a new audio file. | After saving a promo, the form calls `PATCH /promos/:id/unpublish` when the toggle was off. The announcement edit form doesn't offer a file input and explains why. |
+| Announcements have no transcript or duration; promos store captions as plain text. | Audio length is read from the file's metadata. `caption_text` is turned into a WebVTT `<track>` (Blob URL) and also shown as a transcript. |
+| Dashboard counts are strings (PostgreSQL `COUNT`). | Converted with `parseInt` before display and charting. User growth months with no sign-ups are filled in as 0. |
+
+Upload limits are checked in the browser before sending, matching the backend's
+upload middleware: images 2 MB (jpg, jpeg, png, gif), audio 5 MB (mp3, wav, m4a,
+ogg), video 8 MB (mp4, mov, avi, mkv). They are set in `CONFIG.UPLOADS`.
