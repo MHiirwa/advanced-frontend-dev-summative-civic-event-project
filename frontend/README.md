@@ -36,9 +36,9 @@ The frontend must be served over HTTP (not opened as `file://`), because it
 loads scripts by relative path and calls the API with `fetch`/XHR.
 
 1. Install the VS Code extension **Live Server** (Ritwick Dey).
-2. Open the **repository root** in VS Code. The included `.vscode/settings.json`
-   sets Live Server's root to `/frontend` and its start file to `index.html`.
-3. Click **Go Live** in the status bar, or right-click `frontend/index.html` and
+2. In VS Code, open the **`frontend` folder** itself (**File → Open Folder… → frontend**),
+   so Live Server serves `frontend/` as the site root.
+3. Click **Go Live** in the status bar, or right-click `index.html` and
    choose **Open with Live Server**.
 4. The browser opens the public home page (usually `http://127.0.0.1:5500/index.html`).
    Use **Log in** or **Sign up** from there.
