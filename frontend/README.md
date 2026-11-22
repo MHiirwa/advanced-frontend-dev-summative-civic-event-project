@@ -90,6 +90,7 @@ The Postman collection is in `backend/CivicEvents+ API.postman_collection.json`.
 ```
 frontend/
 ├── index.html, login.html, signup.html   public pages (no login needed)
+├── forgot-password.html                   reset request to support (no reset API)
 ├── dashboard.html, events.html            tiny redirects to the real pages
 ├── pages/                                 signed-in pages, for any role
 │   ├── dashboard.html                     personal dashboard
@@ -98,21 +99,24 @@ frontend/
 │   ├── promos.html, promo-details.html
 │   ├── my-registrations.html, my-feedback.html
 │   ├── notifications.html, profile.html, search.html
+│   ├── rwanda-civic-life.html, alu-campus.html   community pages (keyword-matched events)
 ├── admin/                                 admin-only pages (<body data-access="admin">)
 │   ├── dashboard.html                     stats + charts
 │   ├── events.html, announcements.html, promos.html            manage lists
 │   ├── create-event.html, create-announcement.html, create-promo.html   create/edit (?id=…)
 │   ├── users.html, registrations.html, notifications.html
+├── assets/images/                         logo (civicevents-logo.svg + PNG/favicon), local photos
 ├── css/styles.css                         design tokens and shared component styles
 └── js/
     ├── core/          loaded on every page
     │   ├── config.js            API base URL, upload limits, poll interval
     │   ├── tailwind-config.js   Tailwind theme (brand colours, fonts)
     │   ├── ui.js                escape(), toasts, skeletons, empty/error states, confirm dialog
+    │   ├── civic.js             communities + keyword matching, event time status, next Umuganda date
     │   ├── auth.js              token storage, role helpers, GUARDS 1–3
     │   └── api.js               $.ajax wrapper: Bearer header, 401/403 handling, cache, upload progress
     ├── shared/        used by every signed-in page
-    │   ├── layout.js            header (nav, search, bell, profile menu, admin menu) + footer
+    │   ├── layout.js            public/user header + footer; admin sidebar shell (admin/ pages)
     │   ├── notifications.js     bell badge, notification drawer, per-user read state
     │   ├── components.js        cards, tables, pagination, audio player, captions helper
     │   └── app.js               page setup (boot), error/retry, list helpers, page router
@@ -160,11 +164,11 @@ which checks the JWT and the role on every protected endpoint
 | **Landing page by role** | `Auth.homeFor()` in `auth.js` | Admins go to the admin dashboard, users to their personal dashboard. |
 
 **Token handling** ([`js/core/auth.js`](js/core/auth.js), [`js/core/api.js`](js/core/api.js)):
-the JWT and `{ id, full_name, email, role }` are kept in `sessionStorage`, so the
-session ends when the tab closes. The backend tokens expire after one hour, so
-nothing longer-lived is useful, and `localStorage` would leave the token readable
-after the browser closes. `Auth.save(..., remember=true)` exists for a persistent
-`localStorage` session but is not used. Every protected request sends
+the JWT and `{ id, full_name, email, role }` are kept in `sessionStorage` by
+default, so the session ends when the tab closes. Ticking **Remember me** on the
+login page stores them in `localStorage` instead (`Auth.save(token, user, true)`),
+so the session survives closing the browser until the token expires (the backend
+issues one-hour tokens). Every protected request sends
 `Authorization: Bearer <token>`. An expired token or a 401 response signs the user
 out and redirects to the login page with a message.
 
@@ -185,8 +189,32 @@ frontend works around it as follows:
 | The API returns drafts to everyone. | Normal users' lists, details and search results filter out `published === false`. |
 | `POST /promos` ignores `published`; `PUT /announcements/:id` ignores a new audio file. | After saving a promo, the form calls `PATCH /promos/:id/unpublish` when the toggle was off. The announcement edit form doesn't offer a file input and explains why. |
 | Announcements have no transcript or duration; promos store captions as plain text. | Audio length is read from the file's metadata. `caption_text` is turned into a WebVTT `<track>` (Blob URL) and also shown as a transcript. |
+| **Events have no category field.** | The two community pages (Rwanda Civic Life, ALU Campus) list events whose title, description or location contain the community's keywords (`Civic.COMMUNITIES` in `js/core/civic.js`). The page says this on screen; an event can match both, or neither. The "Next Umuganda" date is the last-Saturday calendar rule, not an event. |
+| **No user list total.** `GET /users` pages by 20 without a count. | Admin users list shows Previous/Next only, and Next is disabled when a page has fewer than 20 rows. |
+| **No password reset endpoint.** | `forgot-password.html` (linked from login) checks the email and prepares a reset request email to `CONFIG.SUPPORT_EMAIL`; it does not change any password. It is meant for user accounts only and says that administrator passwords are reset by the system owner. |
+| **Not in the API:** service requests, broadcast notifications, event drafts. | Not built; no UI pretends they exist. |
 | Dashboard counts are strings (PostgreSQL `COUNT`). | Converted with `parseInt` before display and charting. User growth months with no sign-ups are filled in as 0. |
 
 Upload limits are checked in the browser before sending, matching the backend's
 upload middleware: images 2 MB (jpg, jpeg, png, gif), audio 5 MB (mp3, wav, m4a,
 ogg), video 8 MB (mp4, mov, avi, mkv). They are set in `CONFIG.UPLOADS`.
+
+---
+
+## 5. Design and images
+
+The layout follows five mock-ups: centred login/sign-up cards, a split home hero,
+a personal dashboard (stats strip, upcoming list, updates, discover cards) and an
+admin overview with a grouped sidebar, KPI cards, a weekly registrations chart and
+a "Needs attention" list. Signed-in user pages use a light grey canvas with white
+cards; admin pages use the sidebar shell so they look clearly different from user pages.
+
+Colours: ink `#172F43`, civic blue `#2463EB`, maize `#F2C14E` (backgrounds only),
+sage `#E4ECE7`; font Inter. The tokens are in `css/styles.css` (`:root`) and
+`js/core/tailwind-config.js`.
+
+The logo (`assets/images/civicevents-logo.svg`) is a blue "C" ring with a yellow arc
+and a navy dot; the PNG and favicon are rendered from it. The photos in
+`assets/images/` are local copies used for the home hero, community tiles and
+event cards without an uploaded image. The Rwanda coat of arms and the ALU logo
+appear only on their community pages to identify the community.
