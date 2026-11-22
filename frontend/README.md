@@ -105,7 +105,7 @@ frontend/
 │   ├── events.html, announcements.html, promos.html            manage lists
 │   ├── create-event.html, create-announcement.html, create-promo.html   create/edit (?id=…)
 │   ├── users.html, registrations.html, notifications.html
-├── assets/images/                         logo (civicevents-logo.svg + PNG/favicon), local photos
+├── assets/images/                         logo (civicevents-logo.svg), PNG favicon, local photos
 ├── css/styles.css                         design tokens and shared component styles
 └── js/
     ├── core/          loaded on every page
@@ -214,7 +214,8 @@ sage `#E4ECE7`; font Inter. The tokens are in `css/styles.css` (`:root`) and
 `js/core/tailwind-config.js`.
 
 The logo (`assets/images/civicevents-logo.svg`) is a blue "C" ring with a yellow arc
-and a navy dot; the PNG and favicon are rendered from it. The photos in
-`assets/images/` are local copies used for the home hero, community tiles and
-event cards without an uploaded image. The Rwanda coat of arms and the ALU logo
-appear only on their community pages to identify the community.
+and a navy dot; the PNG favicon is rendered from it. The photos in
+`assets/images/` are local copies used for the home hero and the two community
+tiles and pages. Event cards show an image only when the event has one uploaded,
+never a stand-in photo. The Rwanda coat of arms and the ALU logo identify their
+community in the Explore menu and on the community pages.
