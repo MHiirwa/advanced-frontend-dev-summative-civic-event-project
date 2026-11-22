@@ -23,11 +23,15 @@
   function boot(title, intro, active) {
     // Already rendered: the page function is being re-run (Retry, or a refresh after an action).
     // Only update the heading; re-running Layout.init would duplicate <main> and header handlers.
-    if ($('#page-content').length) { $('#main h1').first().text(title); $('#main .lede').first().text(intro || ''); return true; }
-    $('body').prepend('<main id="main" class="mx-auto w-full max-w-7xl px-4 page-content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">CivicEvents+</p><h1>' + Ui.escape(title) + '</h1>' + (intro ? '<p class="lede">' + Ui.escape(intro) + '</p>' : '') + '</div></div><div id="page-alert"></div><div id="page-content"></div></main>');
+    if ($('#page-content').length) { $('#main h1').first().text(title); $('#main .lede').first().text(intro || '').toggle(!!intro); return true; }
+    // Compact page header: title, an optional one-line description, and #page-actions for the
+    // page's main action (filled by App.actions). No uppercase labels or slogans.
+    $('body').prepend('<main id="main" class="mx-auto w-full max-w-7xl px-4 page-content" tabindex="-1"><header class="page-heading"><div><h1>' + Ui.escape(title) + '</h1><p class="lede"' + (intro ? '' : ' hidden') + '>' + Ui.escape(intro || '') + '</p></div><div id="page-actions" class="page-actions"></div></header><div id="page-alert"></div><div id="page-content"></div></main>');
     return Layout.init({ access: admin ? 'admin' : 'user', active: active || page });
   }
   function put(html) { $('#page-content').html(html); }
+  /** Puts the page's primary action(s) on the right of the page header. */
+  function actions(html) { $('#page-actions').html(html || ''); }
   /** Generic error state. Retry re-runs the current page's function (boot() is safe to call again). */
   function fail(err) { put(C.error(err.message)); $('.retry-btn').one('click', run); }
   function showList(kind, endpoint, render, title, intro, active) {
@@ -62,11 +66,27 @@
         // ROLE GUARD (UX only): normal users may only open published items; admins can preview drafts.
         if (!x || (!isAdmin && x.published === false)) { showError({ message: 'This ' + label.toLowerCase() + ' does not exist or is not published.' }, false); return; }
         $('main h1').first().text(x.title);
-        document.title = x.title + ' · CivicEvents+';
+        document.title = x.title + ' · CivicEvents';
         put(back + '<div class="mx-auto mt-4 max-w-4xl">' + render(x, isAdmin, 'font-display text-xl font-semibold text-brand-900') + '</div>');
       }).fail(function (err) { showError(err, true); });
     }
     load();
+  }
+
+  /**
+   * The signed-in user's registrations as { event_id: status } for "Registered" chips.
+   * Normal users only (admins have no registrations UI). Never fails the page: on error
+   * it resolves to {} and cards simply show no registration chip.
+   */
+  function myRegistrations() {
+    var d = $.Deferred();
+    if (Auth.isAdmin()) return d.resolve({}).promise();
+    Api.get('/event-registrations/my-registrations', null, { silent: true }).done(function (r) {
+      var map = {};
+      (r.data || []).forEach(function (x) { map[String(x.event_id)] = x.status; });
+      d.resolve(map);
+    }).fail(function () { d.resolve({}); });
+    return d.promise();
   }
 
   /** Runs the handler for this page. Also used by fail() as the generic Retry. */
@@ -81,7 +101,8 @@
     // true on admin/ pages (<body data-access="admin">). Feature code uses it to show
     // admin-only controls and unpublished items; boot() uses it to pick the access guard.
     adminArea: admin,
-    boot: boot, put: put, fail: fail, run: run,
+    boot: boot, put: put, fail: fail, run: run, actions: actions,
+    myRegistrations: myRegistrations,
     showList: showList, queryBar: queryBar, filterCards: filterCards, mediaDetail: mediaDetail,
     register: function (map) { $.extend(routes, map); }
   };

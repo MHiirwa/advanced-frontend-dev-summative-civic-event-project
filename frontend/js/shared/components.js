@@ -1,10 +1,55 @@
 (function (window, $) {
   'use strict';
   var C = {};
-  C.loading = function () { return '<div class="loading-panel"><span class="spinner"></span><span>Loading from CivicEvents+…</span></div>'; };
-  C.empty = function (title, text) { return '<div class="empty-panel"><div class="empty-icon">✦</div><h2>' + Ui.escape(title) + '</h2><p>' + Ui.escape(text || '') + '</p></div>'; };
-  C.error = function (message) { return '<div class="error-panel"><strong>Something went wrong</strong><p>' + Ui.escape(message) + '</p><button class="btn btn-secondary retry-btn" type="button">Try again</button></div>'; };
-  C.status = function (published) { return '<span class="status ' + (published ? 'status-live' : 'status-draft') + '">' + (published ? 'Published' : 'Unpublished') + '</span>'; };
+  /* ---------- States ---------- */
+  C.loading = function () { return '<div class="loading-panel" role="status"><span class="spinner" aria-hidden="true"></span><span>Loading…</span></div>'; };
+  /** Empty state. `icon` is an optional Ui.icon name (default: inbox). */
+  C.empty = function (title, text, icon) { return '<div class="empty-panel"><div class="empty-icon">' + Ui.icon(icon || 'inbox', 'w-5 h-5') + '</div><h2>' + Ui.escape(title) + '</h2>' + (text ? '<p>' + Ui.escape(text) + '</p>' : '') + '</div>'; };
+  C.error = function (message) { return '<div class="error-panel" role="alert"><span class="text-red-700">' + Ui.icon('warning', 'w-6 h-6') + '</span><strong>Something went wrong</strong><p>' + Ui.escape(message) + '</p><button class="btn btn-secondary retry-btn" type="button">' + Ui.icon('refresh', 'w-4 h-4') + ' Try again</button></div>'; };
+  /** Published / draft pill (admin information). Icon + text, never colour alone. */
+  C.status = function (published) { return '<span class="status ' + (published ? 'status-live' : 'status-draft') + '">' + Ui.icon(published ? 'circleCheck' : 'edit', '') + (published ? 'Published' : 'Draft') + '</span>'; };
+
+  /* ---------- Design-system primitives ---------- */
+  /** Chip: short label with optional icon. variant = blue | sage | coral | maize | success | warning | danger | muted. */
+  C.chip = function (text, variant, icon) {
+    return '<span class="chip' + (variant ? ' chip-' + variant : '') + '">' + (icon ? Ui.icon(icon, '') : '') + Ui.escape(text) + '</span>';
+  };
+  /** Status chip: 'live' | 'today' | 'upcoming' | 'completed' | 'registered'. */
+  C.statusChip = function (key) {
+    var s = Civic.STATUS[key]; if (!s) return '';
+    return '<span class="chip ' + s.chip + '">' + Ui.icon(s.icon, '') + s.label + '</span>';
+  };
+  /**
+   * Date tile ("29 NOV") from a real ISO date. Shows "Date TBA" when the event has no date.
+   * The full date is in a visually hidden <time> so screen readers hear e.g. "Saturday, 29 November 2026".
+   */
+  C.dateTile = function (iso, opts) {
+    opts = opts || {};
+    var d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d)) return '<span class="date-tile tbd' + (opts.large ? ' lg' : '') + '"><span class="dt-day">TBA</span><span class="dt-month">date</span></span>';
+    var full = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return '<time class="date-tile' + (opts.large ? ' lg' : '') + (opts.past ? ' is-past' : '') + '" datetime="' + Ui.escape(iso) + '">' +
+      '<span class="dt-day" aria-hidden="true">' + d.getDate() + '</span>' +
+      '<span class="dt-month" aria-hidden="true">' + d.toLocaleDateString(undefined, { month: 'short' }).replace('.', '') + '</span>' +
+      '<span class="sr-only">' + Ui.escape(full) + '</span></time>';
+  };
+  /** Time range text, e.g. "09:00 – 12:00" (same day) or full dates when it spans days. */
+  C.timeRange = function (startIso, endIso) {
+    if (!startIso) return 'Time to be announced';
+    var s = new Date(startIso), e = endIso ? new Date(endIso) : null;
+    var t = function (d) { return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
+    if (!e || isNaN(e)) return t(s);
+    if (s.toDateString() === e.toDateString()) return t(s) + ' – ' + t(e);
+    return Ui.formatDateTime(startIso) + ' – ' + Ui.formatDateTime(endIso);
+  };
+  /** Rating as Lucide stars (filled to the nearest half via clipping) + exact value for screen readers. */
+  C.stars = function (n) {
+    n = Math.max(0, Math.min(5, Number(n) || 0));
+    var row = function (fill) { var h = ''; for (var i = 0; i < 5; i++) h += Ui.icon('star', 'w-4 h-4' + (fill ? ' fill-current' : '')); return h; };
+    return '<span class="stars relative inline-flex align-middle" aria-hidden="true"><span class="inline-flex text-[#C9C7BD]">' + row(false) + '</span>' +
+      '<span class="absolute inset-y-0 left-0 inline-flex overflow-hidden whitespace-nowrap" style="width:' + (n / 5 * 100) + '%">' + row(true) + '</span></span>' +
+      '<span class="sr-only">' + (Math.round(n * 10) / 10) + ' out of 5 stars</span>';
+  };
   // ROLE GUARD (UX only): Edit/Delete/Publish buttons. Cards only call this when their `admin`
   // argument is true (admin/ pages); the API rejects these actions for non-admins with 403.
   C.manageActions = function (item, type) {
@@ -21,20 +66,107 @@
     return (m && m.image_url) || null;
   };
   // `admin` = render admin extras (status pill + manage buttons). Pass true only on admin/ pages.
-  C.eventCard = function (e, admin) {
-    var image = C.eventImage(e);
-    var root = /\/admin\//.test(window.location.pathname) ? '../pages/' : '';
-    return '<article class="card content-card"><div class="media-frame">' + (image ? '<img src="' + Ui.escape(image) + '" alt="" loading="lazy">' : '<span>COMMUNITY EVENT</span>') + '</div><div class="card-body"><div class="card-meta"><span>EVENT</span>' + (admin ? C.status(e.published) : '') + '</div><h2>' + Ui.escape(e.title) + '</h2><p class="muted clamp">' + Ui.escape(e.description || 'Join your community for this event.') + '</p><p class="card-detail">📅 ' + Ui.escape(Ui.formatDateTime(e.starts_at) || 'Date to be announced') + '</p><p class="card-detail">⌖ ' + Ui.escape(e.location || 'Location to be announced') + '</p><a class="btn btn-secondary btn-small" href="' + root + 'event-details.html?id=' + encodeURIComponent(e.id) + '">View event</a>' + (admin ? C.manageActions(e, 'events') : '') + '</div></article>';
+  /** Relative path from the current page to the pages/ folder (works from /, /pages/ and /admin/). */
+  C.pagesPath = function () {
+    var p = window.location.pathname;
+    return /\/admin\//.test(p) ? '../pages/' : /\/pages\//.test(p) ? '' : 'pages/';
   };
-  C.announcementCard = function (a, admin) {
-    var root = /\/admin\//.test(window.location.pathname) ? '../pages/' : '';
-    return '<article class="card content-card"><div class="card-body"><div class="card-meta"><span class="badge badge-announcement">Announcement</span>' + (admin ? C.status(a.published) : '') + '</div>' +
-      '<h2>' + Ui.escape(a.title) + '</h2>' +
-      // Length comes from the audio file's own metadata (the API has no duration field); C.audioPlayer fills .ap-length.
-      '<p class="muted"><time datetime="' + Ui.escape(a.created_at) + '">' + Ui.escape(Ui.formatDate(a.created_at)) + '</time> · Length <span class="ap-length">…</span></p>' +
-      C.audioPlayer(a.audio_url, a.title) +
-      '<a class="btn btn-secondary btn-small" href="' + root + 'announcement-details.html?id=' + encodeURIComponent(a.id) + '">Open announcement</a>' + (admin ? C.manageActions(a, 'announcements') : '') + '</div></article>';
+
+  /**
+   * Compact event card built around the date tile.
+   *  - Image only when the event has one (metadata.image_url); never a stand-in photo.
+   *  - Status chips come from real data: time status (Civic.status) and, for signed-in
+   *    users, their registration (opts.registration = 'registered' | 'cancelled').
+   *  - "Umuganda" chip only when the event's own text says Umuganda.
+   *  - The title link covers the whole card (stretched link) so the card is one tab stop;
+   *    admin manage buttons sit above it.
+   * ROLE GUARD (UX only): `admin` adds the Published/Draft pill + Edit/Delete (admin/ pages only).
+   */
+  C.eventCard = function (e, admin, opts) {
+    opts = opts || {};
+    var image = C.eventImage(e), st = Civic.status(e), d = e.starts_at ? new Date(e.starts_at) : null;
+    var href = C.pagesPath() + 'event-details.html?id=' + encodeURIComponent(e.id);
+    var community = Object.keys(Civic.COMMUNITIES).filter(function (k) { return Civic.inCommunity(e, k); }).map(function (k) { return Civic.COMMUNITIES[k].title; }).join(' · ');
+    var when = d ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Date to be announced';
+    var chips = (st && st !== 'upcoming' ? C.statusChip(st) : '') + (Civic.mentionsUmuganda(e) ? C.chip('Umuganda', 'sage', 'shovel') : '') + (admin ? C.status(e.published !== false) : '');
+    // ROLE GUARD (UX only): only normal users register; admins manage events instead.
+    var action = opts.registration === 'registered' ? C.statusChip('registered')
+      : opts.registration === 'cancelled' ? C.chip('Registration cancelled', 'muted')
+      : (!Auth.isAdmin() && st !== 'completed' ? '<button type="button" class="ev-register text-link" data-id="' + Ui.escape(e.id) + '" aria-label="Register for ' + Ui.escape(e.title) + '">Register' + Ui.icon('arrowRight', 'w-4 h-4') + '</button>' : '');
+    return '<article class="card ev-card">' +
+      '<a class="ev-media" href="' + href + '" tabindex="-1" aria-hidden="true">' +
+        (image ? '<img src="' + Ui.escape(image) + '" alt="" loading="lazy">'
+               : '<span class="ev-date-panel">' + (d ? '<span>' + d.toLocaleDateString(undefined, { month: 'short' }) + '</span><strong>' + d.getDate() + '</strong>' : '<span>Date TBA</span>') + '</span>') +
+      '</a>' +
+      '<div class="ev-body">' +
+        (community ? '<p class="dc-kicker">' + Ui.escape(community) + '</p>' : '') +
+        '<h3 class="dc-title"><a href="' + href + '">' + Ui.escape(e.title) + '</a></h3>' +
+        '<p class="text-sm text-muted">' + Ui.escape(when) + ' · ' + Ui.escape(e.location || 'Location to be announced') + '</p>' +
+        ((chips || action) ? '<div class="ev-foot">' + (chips ? '<span class="flex flex-wrap gap-1">' + chips + '</span>' : '') + '<span class="ev-action">' + action + '</span></div>' : '') +
+      '</div>' +
+      (admin ? '<div class="ec-admin">' + C.manageActions(e, 'events') + '</div>' : '') +
+    '</article>';
   };
+
+
+  /**
+   * Compact event row for lists (home "Coming up", user dashboard): month over day, title,
+   * "weekday time · location", and one status chip (registration status if known, else time status).
+   */
+  C.eventRow = function (e, opts) {
+    opts = opts || {};
+    var d = e.starts_at ? new Date(e.starts_at) : null, st = Civic.status(e);
+    var when = d ? d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Date to be announced';
+    var chip = opts.registration === 'registered' ? C.statusChip('registered') : (st ? C.statusChip(st) : '');
+    return '<li><a class="event-row" href="' + C.pagesPath() + 'event-details.html?id=' + encodeURIComponent(e.id) + '">' +
+      (d ? '<time class="date-stack" datetime="' + Ui.escape(e.starts_at) + '"><span class="ds-month">' + d.toLocaleDateString(undefined, { month: 'short' }).replace('.', '') + '</span><span class="ds-day">' + d.getDate() + '</span></time>'
+         : '<span class="date-stack"><span class="ds-month">TBA</span></span>') +
+      '<span class="min-w-0 flex-1"><span class="er-title">' + Ui.escape(e.title) + '</span>' +
+      '<span class="er-meta">' + Ui.escape(when) + ' · ' + Ui.escape(e.location || 'Location to be announced') + '</span></span>' +
+      chip + '</a></li>';
+  };
+
+  /** Section heading with an optional "See all" link on the right. */
+  C.sectionHeader = function (id, title, linkHref, linkLabel, extra) {
+    return '<div class="section-heading"><h2 id="' + id + '">' + Ui.escape(title) + '</h2>' +
+      '<div class="flex items-center gap-3">' + (extra || '') +
+      (linkHref ? '<a class="text-link text-sm" href="' + linkHref + '">' + Ui.escape(linkLabel || 'See all') + '</a>' : '') + '</div></div>';
+  };
+
+  /** Compact announcement row (title, date) linking to its detail page, where the audio player lives. */
+  C.announcementRow = function (a) {
+    return '<li><a class="media-row" href="' + C.pagesPath() + 'announcement-details.html?id=' + encodeURIComponent(a.id) + '">' +
+      '<span class="media-row-icon" aria-hidden="true">' + Ui.icon('audio', 'w-4 h-4') + '</span>' +
+      '<span class="min-w-0 flex-1"><span class="media-row-title">' + Ui.escape(a.title) + '</span>' +
+      '<span class="media-row-meta">' + Ui.escape(Ui.formatDate(a.created_at)) + '</span></span>' +
+      '<span class="media-row-action">Listen' + Ui.icon('chevronRight', 'w-4 h-4') + '</span></a></li>';
+  };
+
+  /** Compact promo row (title, short description) linking to its captioned video page. No autoplay, no preload. */
+  C.promoRow = function (p) {
+    return '<li><a class="media-row" href="' + C.pagesPath() + 'promo-details.html?id=' + encodeURIComponent(p.id) + '">' +
+      '<span class="media-row-icon is-video" aria-hidden="true">' + Ui.icon('play', 'w-4 h-4') + '</span>' +
+      '<span class="min-w-0 flex-1"><span class="media-row-title">' + Ui.escape(p.title) + '</span>' +
+      (p.description ? '<span class="media-row-meta truncate block">' + Ui.escape(p.description) + '</span>' : '') + '</span>' +
+      '<span class="media-row-action">Watch' + Ui.icon('chevronRight', 'w-4 h-4') + '</span></a></li>';
+  };
+
+  /**
+   * Announcement row: play/pause (same accessible player logic as the detail page), title, date and
+   * the audio length read from the file. Used by the announcements list.
+   */
+  C.audioRow = function (a) {
+    var t = Ui.escape(a.title), url = Ui.escape(a.audio_url || ''), href = C.pagesPath() + 'announcement-details.html?id=' + encodeURIComponent(a.id);
+    return '<li class="audio-row" data-audio-player data-title="' + t + '">' +
+      '<audio preload="metadata" src="' + url + '"><p>Your browser cannot play this audio. <a href="' + url + '" download>Download it</a>.</p></audio>' +
+      '<button type="button" class="ap-toggle inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-700 text-white hover:bg-brand-800 disabled:opacity-50" aria-label="Play ' + t + '">' + PLAY_SVG + '</button>' +
+      '<span class="min-w-0 flex-1"><a class="er-title hover:text-brand-800 hover:underline" href="' + href + '">' + t + '</a>' +
+        '<span class="er-meta"><time datetime="' + Ui.escape(a.created_at) + '">' + Ui.escape(Ui.formatDate(a.created_at)) + '</time> · <span class="ap-current">0:00</span> / <span class="ap-length ap-duration">…</span></span>' +
+        '<span class="ap-error mt-1 hidden text-xs text-red-800" role="alert">This audio could not be played. <a class="underline" href="' + url + '" download>Download it</a>.</span></span>' +
+      '<a class="btn btn-ghost btn-sm" href="' + href + '">Details</a></li>';
+  };
+  C.announcementCard = function (a) { return '<ul class="card audio-list">' + C.audioRow(a) + '</ul>'; };
+
 
   /* ---------- Accessible audio player ----------
    * A native <audio> (no controls) driven by our own play/pause button and a range slider.
@@ -67,11 +199,14 @@
     '</div>';
   };
   function playerOf(el) { return $(el).closest('[data-audio-player]'); }
+  /** The .ap-length label belonging to this player: inside it (list rows) or in its card (detail page). */
+  function lengthEl($p) { var $l = $p.find('.ap-length'); return $l.length ? $l.first() : $p.closest('article, section').find('.ap-length').first(); }
+
   function syncPlayer(audio) {
     var $p = playerOf(audio), d = audio.duration, c = audio.currentTime || 0;
     $p.find('.ap-current').text(C.formatTime(c));
     $p.find('.ap-duration').text(C.formatTime(d));
-    $p.closest('article, section').find('.ap-length').first().text(C.formatTime(d));
+    lengthEl($p).text(C.formatTime(d));
     var $seek = $p.find('.ap-seek');
     if (isFinite(d)) $seek.attr('max', Math.floor(d));
     if (!$seek.data('dragging')) $seek.val(Math.floor(c));
@@ -97,7 +232,7 @@
     var $p = playerOf(e.target); if (!$p.length) return;
     $p.find('.ap-error').removeClass('hidden');
     $p.find('.ap-toggle, .ap-seek').prop('disabled', true);
-    $p.closest('article, section').find('.ap-length').first().text('unavailable');
+    lengthEl($p).text('unavailable');
   }, true);
   $(document).on('click', '.ap-toggle', function () {
     var audio = playerOf(this).find('audio')[0];
@@ -123,7 +258,49 @@
     var vtt = 'WEBVTT\n\n00:00:00.000 --> 99:59:59.000\n' + cue + '\n';
     return URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
   };
-  C.promoCard = function (p, admin) { var root = /\/admin\//.test(window.location.pathname) ? '../pages/' : ''; return '<article class="card content-card"><div class="media-frame video-placeholder">▶</div><div class="card-body"><div class="card-meta"><span class="badge badge-promo">Promo</span>' + (admin ? C.status(p.published) : '') + '</div><h2>' + Ui.escape(p.title) + '</h2><p class="muted clamp">' + Ui.escape(p.description || '') + '</p><video class="media-player" controls preload="metadata" src="' + Ui.escape(p.video_url) + '"></video><details class="caption-panel"><summary>Read captions</summary><p>' + Ui.escape(p.caption_text || 'No caption text was supplied.') + '</p></details><a class="btn btn-secondary btn-small" href="' + root + 'promo-details.html?id=' + encodeURIComponent(p.id) + '">Open promo</a>' + (admin ? C.manageActions(p, 'promos') : '') + '</div></article>'; };
+  /**
+   * Promo card. The thumbnail is the video's first frame: the <video> only gets its src (with a
+   * #t=0.5 fragment) when it scrolls into view, so lists never download videos up front.
+   */
+  C.promoCard = function (p) {
+    var href = C.pagesPath() + 'promo-details.html?id=' + encodeURIComponent(p.id);
+    return '<article class="card ev-card">' +
+      '<a class="promo-thumb" href="' + href + '" aria-label="Watch ' + Ui.escape(p.title) + '">' +
+        '<video data-lazy-src="' + Ui.escape((p.video_url || '') + '#t=0.5') + '" preload="none" muted playsinline aria-hidden="true" tabindex="-1"></video>' +
+        '<span class="promo-play" aria-hidden="true">' + PLAY_SVG + '</span></a>' +
+      '<div class="ev-body"><h3 class="dc-title"><a href="' + href + '">' + Ui.escape(p.title) + '</a></h3>' +
+        (p.description ? '<p class="clamp text-sm text-muted">' + Ui.escape(p.description) + '</p>' : '') +
+        '<p class="mt-1 text-xs text-muted">' + (p.caption_text ? 'English captions · ' : '') + Ui.escape(Ui.formatDate(p.created_at)) + '</p></div>' +
+    '</article>';
+  };
+  // Lazy first-frame loader for promo thumbnails (IntersectionObserver; falls back to loading at once).
+  var lazyIO = 'IntersectionObserver' in window ? new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) { if (en.isIntersecting) { loadThumb(en.target); lazyIO.unobserve(en.target); } });
+  }, { rootMargin: '200px' }) : null;
+  function loadThumb(v) { v.preload = 'metadata'; v.src = v.getAttribute('data-lazy-src'); v.removeAttribute('data-lazy-src'); }
+  function scanLazy(root) { $(root).find('video[data-lazy-src]').each(function () { lazyIO ? lazyIO.observe(this) : loadThumb(this); }); }
+  new MutationObserver(function (muts) { muts.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) scanLazy(n); }); }); })
+    .observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('error', function (e) { // video that can't load: keep the dark tile with the play icon
+    if (e.target.tagName === 'VIDEO' && e.target.closest('.promo-thumb')) e.target.style.visibility = 'hidden';
+  }, true);
+
+  /* ---------- Register from any event card (events list, community pages, search, dashboard) ----------
+   * POST /event-registrations/register. The API returns 409 if the user already has a registration
+   * for that event, including a cancelled one (re-registering is not allowed). */
+  $(document).on('click', '.ev-register', function () {
+    var $b = $(this), id = $b.attr('data-id');
+    Ui.setLoading($b, true, 'Registering…');
+    Api.post('/event-registrations/register', { event_id: id }).done(function () {
+      $b.closest('.ev-action').html(C.statusChip('registered'));
+      Ui.toast('You are registered.', 'success');
+      $(document).trigger('ce:registered', [id]);
+    }).fail(function (err) {
+      Ui.setLoading($b, false);
+      if (err.status === 409) Ui.toast('You already have a registration for this event (re-registering after cancelling isn\'t possible).', 'warning');
+      else Api.toastError(err);
+    });
+  });
   /** Active/disabled pill for a user account (used on the profile page). */
   C.accountStatus = function (active) {
     return '<span class="status ' + (active === false ? 'status-draft' : 'status-live') + '">' + (active === false ? 'Disabled' : 'Active') + '</span>';
@@ -147,44 +324,5 @@
     return html + '</ul>';
   };
   C.table = function (headers, rows) { return '<div class="table-wrap"><table><thead><tr>' + headers.map(function (h) { return '<th>' + Ui.escape(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + rows + '</tbody></table></div>'; };
-  C.publicHeader = function ($target, active) {
-    var loggedIn = Auth.isLoggedIn();
-    var user = Auth.getUser();
-    var logo = '<a class="public-brand" href="index.html" aria-label="CivicEvents+ home"><span class="public-brand-mark">C+</span><span>CivicEvents<em>+</em></span></a>';
-    var publicLinks =
-      '<a class="' + (active === 'home' ? 'active' : '') + '" href="index.html">Home</a>' +
-      '<a href="pages/events.html">Explore Events</a>' +
-      '<a href="index.html#civic-life">Rwanda Civic Life</a>' +
-      '<a href="pages/events.html">ALU Campus</a>' +
-      '<a href="pages/announcements.html">Announcements</a>' +
-      '<a href="pages/promos.html">Promotions</a>';
-    var accountLinks = loggedIn
-      ? '<a class="btn btn-primary btn-small" href="' + (user.role === 'admin' ? 'admin/dashboard.html' : 'pages/dashboard.html') + '">My dashboard</a><button type="button" class="btn btn-ghost btn-small public-logout">Log out</button>'
-      : '<a class="public-login" href="login.html">Log in</a><a class="btn btn-primary btn-small" href="signup.html">Sign up</a>';
-    $target.html(
-      '<div class="container public-header-inner">' + logo +
-      '<button class="public-menu-button" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="public-mobile-nav">Menu</button>' +
-      '<nav class="public-nav" aria-label="Primary navigation">' + publicLinks + '</nav>' +
-      '<div class="public-account">' + accountLinks + '</div></div>' +
-      '<nav id="public-mobile-nav" class="public-mobile-nav" aria-label="Mobile navigation" hidden>' + publicLinks +
-      '<div class="public-mobile-account">' + accountLinks + '</div></nav>'
-    );
-    $target.find('.public-menu-button').on('click', function () {
-      var open = $(this).attr('aria-expanded') === 'true';
-      $(this).attr({'aria-expanded': String(!open), 'aria-label': open ? 'Open navigation' : 'Close navigation'});
-      $('#public-mobile-nav').prop('hidden', open);
-    });
-    $target.find('.public-logout').on('click', function () { Auth.logout('You have been logged out.', 'success'); });
-  };
-  C.publicFooter = function ($target) {
-    $target.html(
-      '<div class="container public-footer-grid">' +
-      '<div class="public-footer-brand"><p>CivicEvents<em>+</em></p><span>People, places and possibilities across Rwanda.</span></div>' +
-      '<nav aria-label="Footer navigation"><h2>Explore</h2><a href="pages/events.html">Events</a><a href="pages/announcements.html">Announcements</a><a href="pages/promos.html">Promotions</a></nav>' +
-      '<nav aria-label="Account navigation"><h2>Account</h2><a href="login.html">Log in</a><a href="signup.html">Create account</a><a href="pages/profile.html">Profile</a></nav>' +
-      '<div><h2>Community</h2><p>Rwanda civic life</p><p>Campus life</p><p>Local participation</p></div>' +
-      '</div><div class="container public-footer-bottom"><span>© ' + new Date().getFullYear() + ' CivicEvents+</span><span>Community engagement, made accessible.</span></div>'
-    );
-  };
   window.Components = C;
 })(window, jQuery);
