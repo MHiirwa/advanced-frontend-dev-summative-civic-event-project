@@ -13,7 +13,77 @@
   var boot = App.boot, put = App.put, fail = App.fail;
   // ROLE GUARD: admin/events|announcements|promos.html only (Layout GUARD 2). Shows drafts too, and
   // Delete / Publish / Unpublish call admin-only endpoints.
-  function adminContent(type, endpoint, title, intro, createHref) { if (!boot(title, intro, type)) return; put('<a class="btn btn-primary" href="' + createHref + '">＋ Create new</a><div id="admin-list" class="mt-6">' + C.loading() + '</div>'); function load() { Api.get(endpoint).done(function (r) { var items = r.data || []; $('#admin-list').html(items.length ? '<div class="card-grid">' + items.map(function (x) { return type === 'events' ? C.eventCard(x, true) : type === 'announcements' ? C.announcementCard(x, true) : C.promoCard(x, true); }).join('') + '</div>' : C.empty('Nothing here yet', 'Create the first item.')); }).fail(function (e) { $('#admin-list').html(C.error(e.message)); }); } load(); $('#admin-list').on('click', '.manage-delete', function () { var b = $(this), resource = b.data('resource'), id = b.data('id'); if (!window.confirm('Delete this item?')) return; Api.del('/' + resource + '/' + id).done(function () { Ui.toast('Deleted successfully.', 'success'); load(); }).fail(Api.toastError); }); $('#admin-list').on('click', '.manage-publish', function () { var b = $(this), resource = b.data('resource'), id = b.data('id'), action = String(b.data('published')) === 'true' ? 'unpublish' : 'publish'; Api.patch('/' + resource + '/' + id + '/' + action).done(function () { Ui.toast((action === 'publish' ? 'Published' : 'Unpublished') + ' successfully.', 'success'); load(); }).fail(Api.toastError); }); }
+  function adminContent(type, endpoint, title, intro, createHref) {
+    if (!boot(title, intro, type)) return;
+    var LABEL = { events: 'event', announcements: 'announcement', promos: 'promo' }[type];
+    var publishable = type !== 'events'; // the API has publish/unpublish for announcements + promos only
+    var viewPage = { events: 'event-details', announcements: 'announcement-details', promos: 'promo-details' }[type];
+    App.actions('<a class="btn btn-primary btn-sm" href="' + createHref + '">' + Ui.icon('plus', 'w-4 h-4') + 'Create ' + LABEL + '</a>');
+    put('<div class="toolbar-row"><label class="sr-only" for="m-q">Search ' + type + '</label><input id="m-q" class="input max-w-xs" type="search" placeholder="Search ' + type + '…">' +
+        '<label class="sr-only" for="m-filter">Filter</label><select id="m-filter" class="input !w-auto">' +
+        (publishable ? '<option value="">All</option><option value="published">Published</option><option value="draft">Drafts</option>'
+                     : '<option value="">All events</option><option value="upcoming">Upcoming</option><option value="completed">Completed</option>') +
+        '</select><span id="m-count" class="ml-auto text-sm text-muted" role="status"></span></div><div id="m-table">' + Ui.skeletonRows(4) + '</div>');
+    var items = [];
+    var preset = new URLSearchParams(location.search).get('filter');
+    if (preset && $('#m-filter option[value="' + preset + '"]').length) $('#m-filter').val(preset);
+
+    function row(x) {
+      var actions = '<a class="btn btn-ghost btn-sm" href="../pages/' + viewPage + '.html?id=' + encodeURIComponent(x.id) + '">View</a>' +
+        '<a class="btn btn-secondary btn-sm" href="' + createHref + '?id=' + encodeURIComponent(x.id) + '">Edit</a>' +
+        (publishable ? '<button type="button" class="btn btn-secondary btn-sm m-publish" data-id="' + Ui.escape(x.id) + '">' + (x.published !== false ? 'Unpublish' : 'Publish') + '</button>' : '') +
+        '<button type="button" class="btn btn-ghost btn-sm text-red-700 m-delete" data-id="' + Ui.escape(x.id) + '" aria-label="Delete ' + Ui.escape(x.title) + '">Delete</button>';
+      var first = '<td><span class="cell-title">' + Ui.escape(x.title) + '</span><span class="cell-sub">' + Ui.escape(type === 'events' ? (x.location || '') : (x.description || '').slice(0, 80)) + '</span></td>';
+      var when = type === 'events'
+        ? '<td><span class="whitespace-nowrap">' + Ui.escape(Ui.formatDate(x.starts_at) || 'TBA') + '</span><span class="cell-sub">' + Ui.escape(C.timeRange(x.starts_at, x.ends_at)) + '</span></td>'
+        : '<td class="whitespace-nowrap text-muted">' + Ui.escape(Ui.formatDate(x.created_at)) + '</td>';
+      var status = '<td>' + (type === 'events' ? C.statusChip(Civic.status(x)) : C.status(x.published !== false)) + '</td>';
+      return '<tr>' + first + when + status + '<td><div class="row-actions">' + actions + '</div></td></tr>';
+    }
+    function render() {
+      var q = $('#m-q').val().trim().toLowerCase(), f = $('#m-filter').val();
+      var list = items.filter(function (x) {
+        if (q && [x.title, x.description, x.location].join(' ').toLowerCase().indexOf(q) === -1) return false;
+        if (f === 'published' && x.published === false) return false;
+        if (f === 'draft' && x.published !== false) return false;
+        if (f === 'upcoming' && Civic.status(x) === 'completed') return false;
+        if (f === 'completed' && Civic.status(x) !== 'completed') return false;
+        return true;
+      }).sort(type === 'events'
+        ? function (a, b) { return new Date(b.starts_at || 0) - new Date(a.starts_at || 0); }
+        : function (a, b) { return new Date(b.created_at || 0) - new Date(a.created_at || 0); });
+      $('#m-count').text(items.length ? list.length + ' of ' + items.length : '');
+      $('#m-table').html(list.length
+        ? '<div class="table-shell"><table class="data-table"><caption class="sr-only">' + Ui.escape(title) + '</caption><thead><tr><th scope="col">' + (type === 'events' ? 'Event' : 'Title') + '</th><th scope="col">' + (type === 'events' ? 'Date' : 'Added') + '</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' + list.map(row).join('') + '</tbody></table></div>'
+        : items.length ? C.empty('Nothing matches', 'Try another search or filter.', 'search')
+          : C.empty('No ' + type + ' yet', 'Create the first ' + LABEL + ' to get started.', type === 'events' ? 'calendar' : type === 'announcements' ? 'audio' : 'video') +
+            '<div class="mt-3 text-center"><a class="btn btn-primary btn-sm" href="' + createHref + '">' + Ui.icon('plus', 'w-4 h-4') + 'Create ' + LABEL + '</a></div>');
+    }
+    function load() {
+      $('#m-table').html(Ui.skeletonRows(4));
+      Api.get(endpoint).done(function (r) { items = r.data || []; render(); })
+        .fail(function (err) { $('#m-table').empty().append(Ui.errorState({ title: 'Couldn\'t load ' + type, message: err.message, onRetry: load })); });
+    }
+    function find(id) { return items.filter(function (x) { return String(x.id) === String(id); })[0]; }
+    $('#m-q').on('input', Ui.debounce(render, 150)); $('#m-filter').on('change', render);
+    $('#m-table').on('click', '.m-delete', function () {
+      var x = find($(this).attr('data-id')), $b = $(this); if (!x) return;
+      Ui.confirm({ title: 'Delete “' + x.title + '”?', message: 'This permanently removes the ' + LABEL + (type === 'events' ? ', its registrations and feedback.' : '.') + ' It cannot be undone.', confirmText: 'Delete', danger: true }).then(function (ok) {
+        if (!ok) return;
+        Ui.setLoading($b, true, 'Deleting…');
+        Api.del(endpoint + '/' + encodeURIComponent(x.id)).done(function () { Ui.toast('“' + x.title + '” was deleted.', 'success'); load(); })
+          .fail(function (err) { Ui.setLoading($b, false); Api.toastError(err); });
+      });
+    });
+    $('#m-table').on('click', '.m-publish', function () {
+      var x = find($(this).attr('data-id')), $b = $(this), action = x && x.published !== false ? 'unpublish' : 'publish'; if (!x) return;
+      Ui.setLoading($b, true, action === 'publish' ? 'Publishing…' : 'Unpublishing…');
+      Api.patch(endpoint + '/' + encodeURIComponent(x.id) + '/' + action).done(function () {
+        Ui.toast('“' + x.title + '” is now ' + (action === 'publish' ? 'published.' : 'a draft.'), 'success'); load();
+      }).fail(function (err) { Ui.setLoading($b, false); Api.toastError(err); });
+    });
+    load();
+  }
   /* =================================================================
    * Create/edit forms for events, announcements and promos (admin/ pages).
    * ROLE GUARD: these pages have data-access="admin", so boot() -> Layout.init runs
@@ -33,7 +103,7 @@
       announcements: { label: 'announcement', endpoint: '/announcements', kind: 'audio', publishable: true, fileOnEdit: false },
       promos: { label: 'promo', endpoint: '/promos', kind: 'video', publishable: true, fileOnEdit: true }
     }[type];
-    if (!boot((isEdit ? 'Edit ' : 'Create ') + CFG.label, 'Publish accurate, accessible community content.', type)) return;
+    if (!boot((isEdit ? 'Edit ' : 'Create ') + CFG.label, '', type)) return;
     var rule = CONFIG.UPLOADS[CFG.kind], original = null, previewUrl = null;
 
     function field(name, label, input, hint) {
@@ -57,7 +127,7 @@
           '<input class="input" type="file" id="f-file" name="' + CFG.kind + '" accept="' + rule.exts.map(function (x) { return '.' + x; }).join(',') + '" aria-describedby="f-file-hint"' + (isEdit ? '' : ' required aria-required="true"') + '>', fileHint)
       : '<div><p class="label">Audio file</p><p class="text-sm text-muted">The audio of an existing announcement can\'t be replaced (the API keeps the original file). Create a new announcement to publish different audio.</p></div>';
     var publishBlock = CFG.publishable
-      ? '<div class="flex items-start gap-3 rounded-xl border border-brand-100 bg-brand-50 p-4"><input type="checkbox" role="switch" id="f-published" class="mt-1 h-5 w-5 accent-[#156555]" checked aria-describedby="f-published-hint">' +
+      ? '<div class="flex items-start gap-3 rounded-xl border border-brand-100 bg-brand-50 p-4"><input type="checkbox" role="switch" id="f-published" class="mt-1 h-5 w-5 accent-[#2463EB]" checked aria-describedby="f-published-hint">' +
         '<div><label for="f-published" class="font-semibold">Published</label><p id="f-published-hint" class="text-sm text-muted">When on, everyone can see this ' + CFG.label + '. Turn off to keep it as a hidden draft.</p></div></div>'
       : '<p class="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm text-muted">Events are visible to everyone as soon as they are saved. The API has no draft state for events.</p>';
 
@@ -182,9 +252,9 @@
   }
 
   App.register({
-    'admin-events': function () { return adminContent('events', '/events', 'Manage events', 'Create and curate upcoming community events.', 'create-event.html'); },
-    'admin-announcements': function () { return adminContent('announcements', '/announcements', 'Manage announcements', 'Publish audio updates for the community.', 'create-announcement.html'); },
-    'admin-promos': function () { return adminContent('promos', '/promos', 'Manage promos', 'Share accessible video stories.', 'create-promo.html'); },
+    'admin-events': function () { return adminContent('events', '/events', 'Manage events', '', 'create-event.html'); },
+    'admin-announcements': function () { return adminContent('announcements', '/announcements', 'Manage announcements', '', 'create-announcement.html'); },
+    'admin-promos': function () { return adminContent('promos', '/promos', 'Manage promos', '', 'create-promo.html'); },
     'create-event': function () { return form('events'); },
     'create-announcement': function () { return form('announcements'); },
     'create-promo': function () { return form('promos'); }
