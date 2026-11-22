@@ -106,6 +106,20 @@
     return user && user.role === 'admin' ? 'admin/dashboard.html' : 'pages/dashboard.html';
   };
 
+  /* ---------- Return-to after login ---------- */
+  var RETURN_KEY = 'ce_return_to';
+  /**
+   * Returns (and forgets) the page a signed-out user tried to open, or null.
+   * Only same-site absolute paths are accepted ("/…", not "//host" or "http…"),
+   * so the value can never redirect the user to another website.
+   */
+  Auth.takeReturnUrl = function () {
+    var v = null;
+    try { v = sessionStorage.getItem(RETURN_KEY); sessionStorage.removeItem(RETURN_KEY); } catch (e) { return null; }
+    if (!v || v.charAt(0) !== '/' || v.charAt(1) === '/' || /\/(login|signup)\.html/.test(v)) return null;
+    return v;
+  };
+
   /* ---------- Logout ---------- */
   /** Clear the session, queue a message, and go to the login page. */
   Auth.logout = function (message, type) {
@@ -123,6 +137,8 @@
   Auth.requireAuth = function () {
     if (Auth.isLoggedIn()) return true;
     var hadToken = !!Auth.getToken(); // token present but expired
+    // Remember where the user was going so login can bring them back (see takeReturnUrl).
+    try { sessionStorage.setItem(RETURN_KEY, window.location.pathname + window.location.search + window.location.hash); } catch (e) { /* storage blocked */ }
     Auth.logout(
       hadToken ? 'Your session has expired. Please log in again.' : 'Please log in to continue.',
       hadToken ? 'warning' : 'info'
