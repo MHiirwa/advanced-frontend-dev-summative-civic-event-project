@@ -1,82 +1,45 @@
+/**
+ * home.js — public home page (index.html).
+ *  - Shared header/footer via Layout.init({ access: 'public' }): guests see Log in / Sign up,
+ *    signed-in users see the normal app header.
+ *  - Split hero (Kigali photo), the next general Umuganda date (calendar rule, not an event),
+ *    two community tiles (local photos) and, for signed-in users only, the next three real events.
+ *    Every content endpoint requires a login, so guests are not shown placeholder events.
+ */
 (function (window, $) {
   'use strict';
+  var C = window.Components;
+  if (!Layout.init({ access: 'public', active: 'home' })) return;
+  var signedIn = Auth.isLoggedIn();
 
-  Components.publicHeader($('#public-header'), 'home');
-  Components.publicFooter($('#public-footer'));
+  // ROLE GUARD (UX only): guests get a sign-up action next to Explore; signed-in users don't need it.
+  if (!signedIn) $('#hero-actions').append('<a class="btn btn-secondary" href="signup.html">Create an account</a>');
 
-  function loginPrompt(container) {
-    container.html(
-      '<div class="public-empty"><strong>Community content needs a signed-in session.</strong>' +
-      '<p>Log in to browse content returned by the CivicEvents+ backend.</p>' +
-      '<a class="btn btn-primary btn-small" href="login.html">Log in</a></div>'
-    );
-  }
+  var next = Civic.nextUmuganda();
+  $('#umuganda-note').html('<span class="umuganda-dot" aria-hidden="true"></span><strong>Next Umuganda: ' +
+    Ui.escape(next.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) +
+    '</strong><span class="text-muted">· confirm with your local sector</span>');
 
-  function loadEvents() {
-    var $target = $('#featured-events');
-    if (!Auth.isLoggedIn()) {
-      loginPrompt($target);
-      return;
-    }
-    Api.get('/events', null, { cache: true, silent: true }).done(function (res) {
-      var items = (res.data || []).filter(function (event) { return event.published !== false; });
-      items.sort(function (a, b) { return new Date(a.starts_at || 0) - new Date(b.starts_at || 0); });
-      items = items.slice(0, 3);
-      if (!items.length) {
-        $target.html('<div class="public-empty"><strong>No published events are available.</strong><p>New events will appear here when an administrator publishes them.</p></div>');
-        return;
-      }
-      $target.html(items.map(function (event) {
-        var image = event.metadata && event.metadata.image_url;
-        return '<article class="featured-card">' +
-          '<div class="featured-card-media">' + (image ? '<img src="' + Ui.escape(image) + '" alt="" loading="lazy">' : '<span>Community event</span>') + '</div>' +
-          '<div class="featured-card-body"><p class="card-kicker">COMMUNITY EVENT</p>' +
-          '<h3>' + Ui.escape(event.title) + '</h3>' +
-          '<p class="featured-meta">' + Ui.escape(Ui.formatDateTime(event.starts_at) || 'Date to be announced') + '</p>' +
-          '<p class="featured-meta">' + Ui.escape(event.location || 'Location to be announced') + '</p>' +
-          '<a class="text-link" href="pages/event-details.html?id=' + encodeURIComponent(event.id) + '">View details <span aria-hidden="true">→</span></a></div></article>';
-      }).join(''));
+  $('#community-tiles').html(Object.keys(Civic.COMMUNITIES).map(function (k) {
+    var c = Civic.COMMUNITIES[k];
+    return '<a class="community-tile card" href="' + c.href + '">' +
+      '<img src="' + c.image + '" alt="' + Ui.escape(c.alt) + '" loading="lazy" width="240" height="160">' +
+      '<span class="community-tile-body"><span class="community-tile-title">' + Ui.escape(c.title) + '</span>' +
+      '<span class="community-tile-text">' + Ui.escape(c.short) + '</span></span>' +
+      '<span class="community-tile-arrow" aria-hidden="true">' + Ui.icon('arrowRight', 'w-5 h-5') + '</span></a>';
+  }).join(''));
+
+  if (!signedIn) return;
+  $('#upcoming-section').prop('hidden', false);
+  function loadUpcoming() {
+    var $t = $('#upcoming-events').html('<li>' + Ui.skeletonRows(3) + '</li>');
+    $.when(Api.get('/events', null, { cache: true }), window.App ? window.App.myRegistrations() : $.Deferred().resolve({})).done(function (r, regs) {
+      var items = Civic.filterEvents((r.data || []).filter(function (e) { return e.published !== false; }), { upcomingOnly: true }).slice(0, 3);
+      $t.html(items.length ? items.map(function (e) { return C.eventRow(e, { registration: (regs || {})[String(e.id)] }); }).join('')
+        : '<li>' + C.empty('No upcoming events yet', 'Published events will appear here.', 'calendar') + '</li>');
     }).fail(function (err) {
-      $target.html('<div class="public-empty"><strong>Events could not be loaded.</strong><p>' + Ui.escape(err.message) + '</p></div>');
+      $t.empty().append($('<li>').append(Ui.errorState({ title: 'Couldn\'t load events', message: err.message, onRetry: loadUpcoming })));
     });
   }
-
-  function loadAnnouncements() {
-    var $target = $('#featured-announcements');
-    if (!Auth.isLoggedIn()) { loginPrompt($target); return; }
-    Api.get('/announcements', null, { cache: true, silent: true }).done(function (res) {
-      var items = (res.data || []).filter(function (item) { return item.published !== false; }).slice(0, 3);
-      if (!items.length) {
-        $target.html('<div class="public-empty compact"><strong>No published announcements.</strong></div>');
-        return;
-      }
-      $target.html('<div class="announcement-strip">' + items.map(function (item) {
-        return '<article class="announcement-row"><div><p class="card-kicker">ANNOUNCEMENT</p><h3>' + Ui.escape(item.title) + '</h3><p class="featured-meta">' + Ui.escape(Ui.formatDate(item.created_at)) + '</p></div><audio controls preload="metadata" src="' + Ui.escape(item.audio_url) + '"></audio></article>';
-      }).join('') + '</div>');
-    }).fail(function (err) {
-      $target.html('<div class="public-empty compact"><strong>Announcements could not be loaded.</strong><p>' + Ui.escape(err.message) + '</p></div>');
-    });
-  }
-
-  function loadPromos() {
-    var $target = $('#featured-promos');
-    if (!Auth.isLoggedIn()) { loginPrompt($target); return; }
-    Api.get('/promos', null, { cache: true, silent: true }).done(function (res) {
-      var payload = res.data || [];
-      var items = payload.filter(function (item) { return item.published !== false; }).slice(0, 3);
-      if (!items.length) {
-        $target.html('<div class="public-empty compact"><strong>No published promotions.</strong></div>');
-        return;
-      }
-      $target.html('<div class="promo-grid">' + items.map(function (item) {
-        return '<article class="promo-card"><video controls preload="metadata" src="' + Ui.escape(item.video_url) + '"></video><div><p class="card-kicker">PROMOTION</p><h3>' + Ui.escape(item.title) + '</h3><p>' + Ui.escape(item.description || '') + '</p><details class="caption-panel"><summary>Read captions</summary><p>' + Ui.escape(item.caption_text || 'No caption text was supplied.') + '</p></details></div></article>';
-      }).join('') + '</div>');
-    }).fail(function (err) {
-      $target.html('<div class="public-empty compact"><strong>Promotions could not be loaded.</strong><p>' + Ui.escape(err.message) + '</p></div>');
-    });
-  }
-
-  loadEvents();
-  loadAnnouncements();
-  loadPromos();
+  loadUpcoming();
 })(window, jQuery);
