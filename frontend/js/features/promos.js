@@ -12,7 +12,20 @@
   var showList = App.showList, queryBar = App.queryBar, filterCards = App.filterCards, mediaDetail = App.mediaDetail;
   // ROLE GUARD (UX only): showList hides unpublished promos unless this is an admin/ page;
   // C.promoCard(p, admin) adds status + Edit/Delete/Publish only for admins.
-  function promos() { showList('promos', '/promos', function (items) { put(queryBar() + '<div id="cards" class="card-grid">' + (items.length ? items.map(function (p) { return C.promoCard(p, admin); }).join('') : C.empty('No promos yet', 'New community stories will appear here.')) + '</div>'); filterCards(items, function (arr) { $('#cards').html(arr.length ? arr.map(function (p) { return C.promoCard(p, admin); }).join('') : C.empty('No matching promos', 'Try a different search.')); }); }, 'Promos', 'See the initiatives and stories shaping our community.', 'promos'); }
+  function promos() {
+    showList('promos', '/promos', function (items) {
+      function render() {
+        var q = $('#filter').val().trim().toLowerCase(), old = $('#sort').val() === 'old';
+        var list = items.filter(function (x) { return !q || [x.title, x.description, x.caption_text].join(' ').toLowerCase().indexOf(q) !== -1; })
+          .sort(function (a, b) { return (new Date(b.created_at) - new Date(a.created_at)) * (old ? -1 : 1); });
+        $('#list').html(list.length ? '<div class="card-grid">' + list.map(C.promoCard).join('') + '</div>' : (items.length ? C.empty('Nothing matches', 'Try another word.', 'search') : C.empty('No promos yet', 'Short videos with English captions will appear here.', 'video')));
+      }
+      put('<div class="toolbar-row"><label class="sr-only" for="filter">Search</label><input id="filter" class="input max-w-sm" type="search" placeholder="Search promos…">' +
+        '<label class="sr-only" for="sort">Sort</label><select id="sort" class="input !w-auto"><option value="new">Newest first</option><option value="old">Oldest first</option></select></div>' + '<div id="list"></div>');
+      $('#filter').on('input', Ui.debounce(render, 150)); $('#sort').on('change', render);
+      render();
+    }, 'Promos', 'Short videos with English captions.', 'promos');
+  }
   /* Promo detail: native video controls (play/pause, volume, fullscreen) + English captions
    * from caption_text via a WebVTT Blob URL, and the same text as a transcript. */
   var captionBlobUrl = null;
