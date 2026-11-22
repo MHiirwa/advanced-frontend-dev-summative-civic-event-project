@@ -12,7 +12,20 @@
   var showList = App.showList, queryBar = App.queryBar, filterCards = App.filterCards, mediaDetail = App.mediaDetail;
   // ROLE GUARD (UX only): showList hides unpublished announcements unless this is an admin/ page;
   // C.announcementCard(a, admin) adds status + Edit/Delete/Publish only for admins.
-  function announcements() { showList('announcements', '/announcements', function (items) { put(queryBar() + '<div id="cards" class="card-grid">' + (items.length ? items.map(function (a) { return C.announcementCard(a, admin); }).join('') : C.empty('No announcements yet', 'Public updates will appear here.')) + '</div>'); filterCards(items, function (arr) { $('#cards').html(arr.length ? arr.map(function (a) { return C.announcementCard(a, admin); }).join('') : C.empty('No matching announcements', 'Try a different search.')); }); }, 'Announcements', 'Listen to the latest updates from your community.', 'announcements'); }
+  function announcements() {
+    showList('announcements', '/announcements', function (items) {
+      function render() {
+        var q = $('#filter').val().trim().toLowerCase(), old = $('#sort').val() === 'old';
+        var list = items.filter(function (x) { return !q || [x.title, x.description, x.caption_text].join(' ').toLowerCase().indexOf(q) !== -1; })
+          .sort(function (a, b) { return (new Date(b.created_at) - new Date(a.created_at)) * (old ? -1 : 1); });
+        $('#list').html(list.length ? '<ul class="card audio-list">' + list.map(C.audioRow).join('') + '</ul>' : (items.length ? C.empty('Nothing matches', 'Try another word.', 'search') : C.empty('No announcements yet', 'Audio updates from administrators will appear here.', 'audio')));
+      }
+      put('<div class="toolbar-row"><label class="sr-only" for="filter">Search</label><input id="filter" class="input max-w-sm" type="search" placeholder="Search announcements…">' +
+        '<label class="sr-only" for="sort">Sort</label><select id="sort" class="input !w-auto"><option value="new">Newest first</option><option value="old">Oldest first</option></select></div>' + '<div id="list"></div>');
+      $('#filter').on('input', Ui.debounce(render, 150)); $('#sort').on('change', render);
+      render();
+    }, 'Announcements', 'Audio updates published by administrators.', 'announcements');
+  }
   /* Announcement detail: custom accessible audio player; length read from the audio metadata. */
   function announcementDetail() {
     mediaDetail('announcements', 'Announcement', function (a, isAdmin, H2) {
