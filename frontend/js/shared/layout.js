@@ -1,17 +1,19 @@
 /**
  * layout.js
  * ---------------------------------------------------------------
- * Renders the shared header (logo, nav, global search, notification bell,
- * profile menu, admin menu) and footer, then runs the page access guard.
+ * The one shared header (logo, primary nav with the Explore menu, search,
+ * notification bell, profile menu, admin menu) and footer for EVERY page except
+ * the sign-in/sign-up screens, plus the page access guard.
  *
  * Every page calls this first:
  *
  *   if (!Layout.init({ access: 'user', active: 'events' })) return;
  *
- *   access: 'guest' -> login/signup (logged-in users are bounced to their home)
- *           'user'  -> any logged-in user            (GUARD 1: Auth.requireAuth)
- *           'admin' -> administrators only           (GUARD 2: Auth.requireAdmin)
- *   active: which nav item gets aria-current="page"
+ *   access: 'guest'  -> login/signup (signed-in users are bounced to their home; no header)
+ *           'public' -> home page: header for guests or signed-in users, no guard
+ *           'user'   -> any signed-in user            (GUARD 1: Auth.requireAuth)
+ *           'admin'  -> administrators only           (GUARD 2: Auth.requireAdmin)
+ *   active: the current page key; mapped to a nav item that gets aria-current="page"
  *
  * Returns false when the user was redirected or blocked, so the page script stops.
  */
@@ -25,159 +27,290 @@
   var ROOT = /\/(pages|admin)\//.test(window.location.pathname) ? '../' : '';
   Layout.root = ROOT;
 
-  var NAV = [
-    { key: 'events', label: 'Events', href: ROOT + 'pages/events.html' },
-    { key: 'announcements', label: 'Announcements', href: ROOT + 'pages/announcements.html' },
-    { key: 'promos', label: 'Promos', href: ROOT + 'pages/promos.html' },
-    { key: 'notifications', label: 'Notifications', href: ROOT + 'pages/notifications.html' }
-  ];
+  /** Page key -> primary nav item. Event pages and both communities live under "Explore events". */
+  var SECTION = {
+    home: 'home', events: 'explore', 'event-details': 'explore', explore: 'explore', community: 'explore', search: 'explore',
+    announcements: 'announcements', 'announcement-details': 'announcements', promos: 'promos', 'promo-details': 'promos',
+    'my-registrations': 'my-registrations'
+  };
 
-  // ROLE GUARD (UX only): admin shortcuts are tagged data-role="admin" below, so GUARD 3
-  // (Auth.applyRoleVisibility) removes them from the DOM for normal users. The backend
-  // still rejects non-admin calls to these endpoints with 403.
-  var ADMIN_MENU = [
-    { label: 'Manage events', href: ROOT + 'admin/events.html', icon: 'calendar' },
-    { label: 'Manage announcements', href: ROOT + 'admin/announcements.html', icon: 'audio' },
-    { label: 'Manage promos', href: ROOT + 'admin/promos.html', icon: 'video' },
-    { label: 'Manage users', href: ROOT + 'admin/users.html', icon: 'users' },
-    { label: 'Registrations & feedback', href: ROOT + 'admin/registrations.html', icon: 'inbox' },
-    { label: 'Manage notifications', href: ROOT + 'admin/notifications.html', icon: 'bell' },
-    { label: 'Create event', href: ROOT + 'admin/create-event.html', icon: 'plus' },
-    { label: 'Create announcement', href: ROOT + 'admin/create-announcement.html', icon: 'plus' },
-    { label: 'Create promo', href: ROOT + 'admin/create-promo.html', icon: 'plus' }
-  ];
+  /**
+   * Primary nav by audience. ROLE GUARD (UX only):
+   *  - guests:  Home · Explore events · Announcements · Promos
+   *  - users:   Home · Explore events · My registrations · Announcements (Promos stays in the
+   *             Explore menu and footer)
+   *  - admins:  Home · Explore events · Announcements · Promos · Admin (one link to the admin workspace)
+   */
+  function navFor(signedIn) {
+    var home = { key: 'home', label: 'Home', href: ROOT + 'index.html' },
+        explore = { key: 'explore', label: 'Explore events', explore: true },
+        ann = { key: 'announcements', label: 'Announcements', href: ROOT + 'pages/announcements.html' },
+        promos = { key: 'promos', label: 'Promos', href: ROOT + 'pages/promos.html' };
+    if (!signedIn) return [home, explore, ann, promos];
+    if (Auth.isAdmin()) return [home, explore, ann, promos, { key: 'admin', label: 'Admin', href: ROOT + 'admin/dashboard.html' }];
+    return [home, explore, { key: 'my-registrations', label: 'My registrations', href: ROOT + 'pages/my-registrations.html' }, ann];
+  }
 
-  var LOGO = '<svg class="h-9 w-9" viewBox="0 0 40 40" aria-hidden="true" focusable="false">' +
-    '<rect width="40" height="40" rx="11" fill="#156555"/>' +
-    '<rect x="9" y="11" width="22" height="19" rx="3.5" fill="none" stroke="#fff" stroke-width="2.4"/>' +
-    '<path d="M9 17h22" stroke="#fff" stroke-width="2.4"/>' +
-    '<path d="M15 8v5M25 8v5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>' +
-    '<circle cx="20" cy="24" r="2.6" fill="#e8912d"/></svg>';
+  // ROLE GUARD (UX only): admin destinations. They are tagged data-role="admin" in the header,
+  // so GUARD 3 (Auth.applyRoleVisibility) removes them from the DOM for normal users, and the
+  // admin sub-navigation is only drawn on admin/ pages (already protected by GUARD 2).
+  // The backend still rejects non-admin calls to these endpoints with 403.
+  var ADMIN_SECTIONS = [
+    { key: 'dashboard', label: 'Dashboard', href: ROOT + 'admin/dashboard.html', icon: 'layout' },
+    { key: 'admin-events', label: 'Events', href: ROOT + 'admin/events.html', icon: 'calendar', also: ['create-event'] },
+    { key: 'admin-announcements', label: 'Announcements', href: ROOT + 'admin/announcements.html', icon: 'megaphone', also: ['create-announcement'] },
+    { key: 'admin-promos', label: 'Promos', href: ROOT + 'admin/promos.html', icon: 'video', also: ['create-promo'] },
+    { key: 'users', label: 'Users', href: ROOT + 'admin/users.html', icon: 'users' },
+    { key: 'registrations', label: 'Registrations', href: ROOT + 'admin/registrations.html', icon: 'inbox' },
+    { key: 'admin-notifications', label: 'Notifications', href: ROOT + 'admin/notifications.html', icon: 'bell' }
+  ];
+  // Brand mark (assets/images/civicevents-logo.svg, transparent PNG). Decorative: the link carries the name.
+  var LOGO = '<img src="' + ROOT + 'assets/images/civicevents-logo.svg" alt="" width="36" height="36" class="h-9 w-9 object-contain">';
 
   function initials(name) {
     var parts = String(name || '?').trim().split(/\s+/);
     return ((parts[0] || '?')[0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
   }
 
-  function navLink(item, active, mobile) {
-    var isActive = item.key === active;
-    var base = mobile ? 'block rounded-lg px-3 py-2.5 text-base font-medium' : 'rounded-lg px-3 py-2 text-sm font-semibold';
-    return '<a href="' + item.href + '" class="' + base + ' ' +
-      (isActive ? 'bg-brand-50 text-brand-800' : 'text-ink/80 hover:bg-brand-50 hover:text-brand-800') + '"' +
-      (isActive ? ' aria-current="page"' : '') + '>' + item.label + '</a>';
+  /* ---------- Explore menu content (shared by desktop panel and mobile list) ---------- */
+  function communities() {
+    return Object.keys(Civic.COMMUNITIES).map(function (k) { return Civic.COMMUNITIES[k]; });
+  }
+  var BROWSE = [
+    { label: 'All events', href: ROOT + 'pages/events.html' },
+    { label: 'Announcements', href: ROOT + 'pages/announcements.html' },
+    { label: 'Promos', href: ROOT + 'pages/promos.html' }
+  ];
+
+  function explorePanel() {
+    return '<div id="explore-panel" class="explore-panel" hidden>' +
+      '<div class="mx-auto grid max-w-7xl items-center gap-2 px-4 py-2 md:grid-cols-[1fr_1fr_auto] md:gap-6">' +
+        communities().map(function (c) {
+          // Compact row: small logo on the left, title on the right, one-line description below it.
+          return '<a class="explore-dest" data-explore-link href="' + ROOT + c.href + '">' +
+            '<span class="explore-logo' + (c.logoCrop ? ' crop-' + c.logoCrop : '') + '"><img src="' + ROOT + c.logo + '" alt="' + Ui.escape(c.logoAlt) + '" loading="lazy"></span>' +
+            '<span class="min-w-0"><span class="explore-title">' + Ui.escape(c.title) + '</span>' +
+            '<span class="explore-text">' + Ui.escape(c.short) + '</span></span></a>';
+        }).join('') +
+        '<div class="explore-browse"><p class="explore-browse-title">Browse</p>' +
+          BROWSE.map(function (b) { return '<a data-explore-link href="' + b.href + '">' + b.label + '</a>'; }).join('') +
+        '</div>' +
+      '</div></div>';
   }
 
-  function renderHeader(active) {
+  /* ---------- Header ---------- */
+  function navItem(item, current) {
+    var on = item.key === current;
+    if (item.explore) {
+      return '<div class="nav-explore flex">' +
+        '<button type="button" id="explore-toggle" class="nav-item' + (on ? ' is-current' : '') + '" aria-expanded="false" aria-controls="explore-panel">' +
+          'Explore events' + Ui.icon('chevron', 'nav-chevron w-4 h-4') + '</button></div>';
+    }
+    return '<a class="nav-item' + (on ? ' is-current' : '') + '" href="' + item.href + '"' + (on ? ' aria-current="page"' : '') + '>' + item.label + '</a>';
+  }
+
+  function mobileLink(href, label, on, extraAttr) {
+    return '<a href="' + href + '" class="block rounded-md px-3 py-2.5 text-base font-medium ' + (on ? 'bg-brand-50 text-brand-800' : 'text-ink hover:bg-brand-50') + '"' + (on ? ' aria-current="page"' : '') + (extraAttr || '') + '>' + label + '</a>';
+  }
+
+  function renderHeader(active, signedIn, adminPage) {
     var user = Auth.getUser() || {};
-    var desktopLinks = NAV.map(function (i) { return navLink(i, active, false); }).join('');
-    var mobileLinks = NAV.map(function (i) { return navLink(i, active, true); }).join('');
+    // On admin/ pages the "Dashboard" item is current and the public sections are not.
+    var current = adminPage ? 'admin' : (SECTION[active] || '');
 
-    var adminDesktop =
-      '<a data-role="admin" href="' + ROOT + 'admin/dashboard.html" class="rounded-lg px-3 py-2 text-sm font-semibold ' +
-        (active === 'dashboard' ? 'bg-brand-50 text-brand-800" aria-current="page' : 'text-ink/80 hover:bg-brand-50 hover:text-brand-800') + '">Dashboard</a>' +
-      '<div data-role="admin" class="relative" data-dropdown>' +
-        '<button type="button" class="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-ink/80 hover:bg-brand-50 hover:text-brand-800" ' +
-          'aria-expanded="false" aria-controls="admin-menu" data-dropdown-toggle>Admin ' + Ui.icon('chevron', 'w-4 h-4') + '</button>' +
-        '<div id="admin-menu" class="absolute left-0 z-50 mt-2 hidden w-64 rounded-xl border border-brand-100 bg-white p-1 shadow-lg">' +
-          ADMIN_MENU.map(function (m) {
-            return '<a href="' + m.href + '" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-brand-50">' + Ui.icon(m.icon, 'w-4 h-4 text-brand-700') + m.label + '</a>';
-          }).join('') +
-        '</div>' +
-      '</div>';
+    var right = signedIn
+      // Right-hand group, all vertically centred with equal gaps: search, notifications, account.
+      // Search opens pages/search.html (no backend search endpoint; results are filtered client-side).
+      ? '<a href="' + ROOT + 'pages/search.html" class="hidden rounded-full p-2 text-ink hover:bg-brand-50 sm:inline-flex" aria-label="Search">' + Ui.icon('search', 'w-5 h-5') + '</a>' +
+        '<button type="button" id="notif-bell" class="relative rounded-full p-2 text-ink hover:bg-brand-50" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false">' +
+          Ui.icon('bell', 'w-5 h-5') +
+          '<span id="notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[1.15rem] rounded-full bg-coral-text px-1 text-center text-[11px] font-bold leading-[1.15rem] text-white" aria-hidden="true">0</span>' +
+        '</button>' +
+        '<div class="relative" data-dropdown>' +
+          '<button type="button" class="flex items-center gap-2 rounded-full p-1 pr-2 hover:bg-brand-50" aria-expanded="false" aria-controls="profile-menu" data-dropdown-toggle>' +
+            '<span class="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-xs font-bold text-white" aria-hidden="true">' + Ui.escape(initials(user.full_name)) + '</span>' +
+            '<span class="hidden max-w-[8rem] truncate text-sm font-medium sm:block">' + Ui.escape((user.full_name || 'Account').split(' ')[0]) + '</span>' +
+            '<span class="sr-only">Account menu for ' + Ui.escape(user.full_name || 'your account') + '</span>' +
+          '</button>' +
+          '<div id="profile-menu" class="absolute right-0 z-50 mt-2 hidden w-64 rounded-lg border border-line bg-white p-1 shadow-lg">' +
+            '<div class="border-b border-line px-3 py-2">' +
+              '<p class="truncate font-semibold">' + Ui.escape(user.full_name || '') + '</p>' +
+              '<p class="truncate text-xs text-muted">' + Ui.escape(user.email || '') + '</p>' +
+              '<span class="badge mt-1 ' + (user.role === 'admin' ? 'badge-announcement' : 'badge-event') + '">' + Ui.escape(user.role || 'user') + '</span>' +
+            '</div>' +
+            '<a href="' + ROOT + 'pages/profile.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">My profile</a>' +
+            // ROLE GUARD (UX only): personal dashboard, registrations and feedback are normal-user features.
+            '<a data-role="user" href="' + ROOT + 'pages/dashboard.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">My dashboard</a>' +
+            '<a data-role="user" href="' + ROOT + 'pages/my-registrations.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">My registrations</a>' +
+            '<a data-role="user" href="' + ROOT + 'pages/my-feedback.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">My feedback</a>' +
+            '<a href="' + ROOT + 'pages/notifications.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">All notifications</a>' +
+            '<div class="my-1 border-t border-line"></div>' +
+            '<button type="button" id="logout-btn" class="block w-full rounded-md px-3 py-2 text-left text-sm text-red-800 hover:bg-red-50">Log out</button>' +
+          '</div>' +
+        '</div>'
+      : '<a class="btn btn-ghost btn-sm hidden sm:inline-flex" href="' + ROOT + 'login.html">Log in</a>' +
+        '<a class="btn btn-primary btn-sm" href="' + ROOT + 'signup.html">Sign up</a>';
 
-    var adminMobile =
-      '<div data-role="admin" class="mt-2 border-t border-brand-100 pt-2">' +
-        '<p class="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-muted">Admin</p>' +
-        navLink({ key: 'dashboard', label: 'Dashboard', href: ROOT + 'admin/dashboard.html' }, active, true) +
-        ADMIN_MENU.map(function (m) { return navLink({ key: '', label: m.label, href: m.href }, active, true); }).join('') +
+    var mobileExplore =
+      '<button type="button" id="m-explore-toggle" class="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-base font-medium ' + (current === 'explore' ? 'bg-brand-50 text-brand-800' : 'text-ink hover:bg-brand-50') + '" aria-expanded="false" aria-controls="m-explore-list">Explore events ' + Ui.icon('chevron', 'nav-chevron w-4 h-4') + '</button>' +
+      '<div id="m-explore-list" class="ml-3 border-l border-line pl-2" hidden>' +
+        communities().map(function (c) { return mobileLink(ROOT + c.href, '<span class="inline-flex items-center gap-2">' + Ui.icon(c.icon, 'w-4 h-4 text-muted') + Ui.escape(c.title) + '</span>'); }).join('') +
+        mobileLink(ROOT + 'pages/events.html', 'All events') +
       '</div>';
 
     var html =
       '<a href="#main" class="skip-link">Skip to main content</a>' +
-      '<header class="sticky top-0 z-40 border-b border-brand-100 bg-white/95 backdrop-blur">' +
-        '<div class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4">' +
-          '<a href="' + ROOT + Auth.homeFor(user) + '" class="flex shrink-0 items-center gap-2" aria-label="CivicEvents+ home">' + LOGO +
-            '<span class="font-display text-xl font-semibold text-brand-900">CivicEvents<span class="text-accent">+</span></span></a>' +
+      '<header class="site-header sticky top-0 z-40 border-b border-line bg-white">' +
+        '<div class="mx-auto flex h-16 max-w-7xl items-stretch gap-2 px-4">' +
+          // The logo always returns to the home page (index.html), signed in or not.
+          '<a href="' + ROOT + 'index.html" class="flex shrink-0 items-center gap-2" aria-label="CivicEvents home">' + LOGO +
+            '<span class="text-lg font-bold tracking-tight text-ink">CivicEvents</span></a>' +
+          // Primary navigation, centred between the logo and the account actions.
+          '<nav aria-label="Primary" class="mx-auto hidden items-stretch gap-0.5 lg:flex">' +
+            navFor(signedIn).map(function (i) { return navItem(i, current); }).join('') +
+          '</nav>' +
 
-          '<nav aria-label="Primary" class="ml-4 hidden items-center gap-1 lg:flex">' + desktopLinks + adminDesktop + '</nav>' +
-
-          // Global search (no backend search endpoint exists; pages/search.html filters client-side)
-          '<form role="search" action="' + ROOT + 'pages/search.html" method="get" class="ml-auto hidden w-full max-w-xs md:block">' +
-            '<label for="global-search" class="sr-only">Search events, announcements and promos</label>' +
-            '<div class="relative"><span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">' + Ui.icon('search', 'w-4 h-4') + '</span>' +
-            '<input id="global-search" name="q" type="search" placeholder="Search…" class="input !rounded-full !py-2 pl-9 text-sm" autocomplete="off"></div>' +
-          '</form>' +
-
-          '<div class="ml-auto flex items-center gap-1 md:ml-0">' +
-            '<button type="button" id="notif-bell" class="relative rounded-full p-2.5 text-ink hover:bg-brand-50" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false">' +
-              Ui.icon('bell', 'w-6 h-6') +
-              '<span id="notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[1.15rem] rounded-full bg-accent px-1 text-center text-[11px] font-bold leading-[1.15rem] text-ink" aria-hidden="true">0</span>' +
-            '</button>' +
-
-            '<div class="relative" data-dropdown>' +
-              '<button type="button" class="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-brand-50" aria-expanded="false" aria-controls="profile-menu" data-dropdown-toggle>' +
-                '<span class="flex h-9 w-9 items-center justify-center rounded-full bg-brand-700 text-sm font-bold text-white" aria-hidden="true">' + Ui.escape(initials(user.full_name)) + '</span>' +
-                '<span class="hidden max-w-[8rem] truncate text-sm font-semibold sm:block">' + Ui.escape((user.full_name || 'Account').split(' ')[0]) + '</span>' +
-                '<span class="sr-only">Account menu</span>' + Ui.icon('chevron', 'hidden w-4 h-4 sm:block') +
-              '</button>' +
-              '<div id="profile-menu" class="absolute right-0 z-50 mt-2 hidden w-64 rounded-xl border border-brand-100 bg-white p-1 shadow-lg">' +
-                '<div class="border-b border-brand-100 px-3 py-2">' +
-                  '<p class="truncate font-semibold">' + Ui.escape(user.full_name || '') + '</p>' +
-                  '<p class="truncate text-xs text-muted">' + Ui.escape(user.email || '') + '</p>' +
-                  '<span class="badge mt-1 ' + (user.role === 'admin' ? 'badge-announcement' : 'badge-event') + '">' + Ui.escape(user.role || 'user') + '</span>' +
-                '</div>' +
-                '<a href="' + ROOT + 'pages/profile.html" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-brand-50">' + Ui.icon('user', 'w-4 h-4 text-brand-700') + 'My profile</a>' +
-                // ROLE GUARD (UX only): personal dashboard, registrations and feedback are normal-user features.
-                '<a data-role="user" href="' + ROOT + 'pages/dashboard.html" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-brand-50">' + Ui.icon('layout', 'w-4 h-4 text-brand-700') + 'My dashboard</a>' +
-                '<a data-role="user" href="' + ROOT + 'pages/my-registrations.html" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-brand-50">' + Ui.icon('calendar', 'w-4 h-4 text-brand-700') + 'My registrations</a>' +
-                '<a data-role="user" href="' + ROOT + 'pages/my-feedback.html" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-brand-50">' + Ui.icon('star', 'w-4 h-4 text-brand-700') + 'My feedback</a>' +
-                '<button type="button" id="logout-btn" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-800 hover:bg-red-50">' + Ui.icon('logout', 'w-4 h-4') + 'Log out</button>' +
-              '</div>' +
-            '</div>' +
-
-            '<button type="button" id="mobile-toggle" class="rounded-full p-2.5 hover:bg-brand-50 lg:hidden" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">' + Ui.icon('menu', 'w-6 h-6') + '</button>' +
+          '<div class="ml-auto flex items-center lg:ml-0 ' + (signedIn ? 'gap-2' : 'gap-1') + '">' + right +
+            '<button type="button" id="mobile-toggle" class="rounded-full p-2.5 hover:bg-brand-50 lg:hidden" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">' + Ui.icon('menu', 'w-5 h-5') + '</button>' +
           '</div>' +
         '</div>' +
-
-        '<div id="mobile-nav" class="hidden border-t border-brand-100 bg-white px-4 pb-4 pt-2 lg:hidden">' +
-          '<form role="search" action="' + ROOT + 'pages/search.html" method="get" class="mb-2 md:hidden">' +
-            '<label for="global-search-m" class="sr-only">Search events, announcements and promos</label>' +
-            '<input id="global-search-m" name="q" type="search" placeholder="Search…" class="input" autocomplete="off"></form>' +
-          '<nav aria-label="Mobile primary">' + mobileLinks + adminMobile + '</nav>' +
+        explorePanel() +
+        '<div id="mobile-nav" class="hidden max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-line bg-white px-4 pb-4 pt-2 lg:hidden">' +
+          (signedIn
+            ? '<form role="search" action="' + ROOT + 'pages/search.html" method="get" class="mb-2 md:hidden">' +
+                '<label for="global-search-m" class="sr-only">Search events, announcements and promos</label>' +
+                '<input id="global-search-m" name="q" type="search" placeholder="Search…" class="input" autocomplete="off"></form>'
+            : '') +
+          '<nav aria-label="Mobile primary">' +
+            navFor(signedIn).map(function (i) { return i.explore ? mobileExplore : mobileLink(i.href, i.label, current === i.key); }).join('') +
+            (signedIn ? '' : '<div class="mt-3 flex gap-2 border-t border-line pt-3"><a class="btn btn-secondary flex-1" href="' + ROOT + 'login.html">Log in</a><a class="btn btn-primary flex-1" href="' + ROOT + 'signup.html">Sign up</a></div>') +
+          '</nav>' +
         '</div>' +
       '</header>';
 
     $('#app-header').html(html);
   }
 
+
+  /* ---------- Admin shell ----------
+   * Admin pages get their own workspace instead of the public header: a left sidebar
+   * with every admin tool (grouped), and a slim top bar (menu button on small screens,
+   * "View site", notifications). ROLE GUARD: only rendered when the page is in admin/
+   * AND the signed-in user is an admin (Layout.init); normal users get the public header
+   * and the "no access" screen instead. */
+  // Sidebar groups, separated by thin dividers (no group headings), as in the admin mock-up.
+  var ADMIN_GROUPS = [
+    ['dashboard', 'admin-events', 'registrations'],
+    ['admin-announcements', 'admin-promos'],
+    ['users', 'admin-notifications']
+  ];
+  function renderAdminShell(pageKey) {
+    var user = Auth.getUser() || {};
+    var byKey = {}; ADMIN_SECTIONS.forEach(function (m) { byKey[m.key] = m; });
+    var nav = ADMIN_GROUPS.map(function (keys) {
+      return '<div class="side-section">' + keys.map(function (k) {
+        var m = byKey[k], on = m.key === pageKey || (m.also || []).indexOf(pageKey) !== -1;
+        var label = k === 'dashboard' ? 'Overview' : m.label;
+        // Notifications shows the unread count (kept in sync by js/shared/notifications.js).
+        var count = k === 'admin-notifications' ? '<span class="side-count" data-unread-count hidden></span>' : '';
+        return '<a class="side-link' + (on ? ' is-current' : '') + '" href="' + m.href + '"' + (on ? ' aria-current="page"' : '') + '>' + Ui.icon(m.icon, 'w-[18px] h-[18px]') + '<span>' + label + '</span>' + count + '</a>';
+      }).join('') + '</div>';
+    }).join('');
+    var html =
+      '<a href="#main" class="skip-link">Skip to main content</a>' +
+      '<aside id="admin-sidebar" class="admin-sidebar" aria-label="Admin">' +
+        '<a href="' + ROOT + 'admin/dashboard.html" class="side-brand" aria-label="CivicEvents admin dashboard">' + LOGO + '<span>CivicEvents</span><span class="side-badge">Admin</span></a>' +
+        '<nav class="side-nav" aria-label="Admin tools">' + nav + '</nav>' +
+        '<div class="side-foot">' +
+          '<a class="side-link" href="' + ROOT + 'index.html">' + Ui.icon('external', 'w-[18px] h-[18px]') + '<span>View public site</span></a>' +
+          '<div class="side-user"><span class="side-avatar" aria-hidden="true">' + Ui.escape(initials(user.full_name)) + '</span>' +
+            '<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">' + Ui.escape(user.full_name || 'Admin') + '</span>' +
+            '<a class="text-xs text-muted hover:underline" href="' + ROOT + 'pages/profile.html">My profile</a></span>' +
+            '<button type="button" id="logout-btn" class="side-logout" aria-label="Log out">' + Ui.icon('logout', 'w-[18px] h-[18px]') + '</button></div>' +
+        '</div>' +
+      '</aside>' +
+      '<div id="admin-scrim" class="admin-scrim" hidden></div>' +
+      // Small screens only: a slim bar with the menu button (the sidebar is always visible on desktop).
+      '<header class="admin-topbar lg:hidden">' +
+        '<button type="button" id="admin-menu-toggle" class="rounded-md p-2 text-ink hover:bg-brand-50" aria-label="Open admin menu" aria-expanded="false" aria-controls="admin-sidebar">' + Ui.icon('menu', 'w-5 h-5') + '</button>' +
+        '<span class="ml-2 font-semibold">CivicEvents admin</span>' +
+      '</header>';
+    $('body').addClass('admin-app');
+    $('#app-header').html(html);
+  }
+  function bindAdminShell() {
+    function setMenu(open) {
+      $('#admin-sidebar').toggleClass('is-open', open);
+      $('#admin-scrim').prop('hidden', !open);
+      $('#admin-menu-toggle').attr({ 'aria-expanded': String(open), 'aria-label': open ? 'Close admin menu' : 'Open admin menu' });
+      if (open) $('#admin-sidebar .side-link').first().trigger('focus');
+    }
+    $('#admin-menu-toggle').on('click', function () { setMenu(!$('#admin-sidebar').hasClass('is-open')); });
+    $('#admin-scrim').on('click', function () { setMenu(false); });
+    $(document).on('keydown', function (e) {
+      if (e.key === 'Escape' && $('#admin-sidebar').hasClass('is-open')) { setMenu(false); $('#admin-menu-toggle').trigger('focus'); }
+    });
+    $('#logout-btn').on('click', function () { Auth.logout('You have been logged out.', 'success'); });
+  }
+
+  /** Light one-line footer (matches the mock-ups): copyright + tagline, then the key links. */
   function renderFooter() {
     var year = new Date().getFullYear();
+    var links = communities().map(function (c) { return [ROOT + c.href, c.title]; })
+      .concat([[ROOT + 'pages/announcements.html', 'Announcements'], [ROOT + 'pages/promos.html', 'Promos'], ['mailto:' + CONFIG.SUPPORT_EMAIL, CONFIG.SUPPORT_EMAIL]]);
     $('#app-footer').html(
-      '<footer class="mt-16 bg-brand-900 text-brand-100">' +
-        '<div class="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4">' +
-          '<div class="lg:col-span-2"><p class="font-display text-2xl font-semibold text-white">CivicEvents<span class="text-accent">+</span></p>' +
-            '<p class="mt-3 max-w-md text-sm leading-relaxed text-brand-200">Your community hub for local events, audio announcements and promo videos. Stay informed and take part in what happens around you.</p></div>' +
-          '<nav aria-label="Footer explore"><p class="text-sm font-bold uppercase tracking-wide text-white">Explore</p>' +
-            '<ul class="mt-3 space-y-2 text-sm"><li><a class="hover:text-white hover:underline" href="' + ROOT + 'pages/events.html">Events</a></li>' +
-            '<li><a class="hover:text-white hover:underline" href="' + ROOT + 'pages/announcements.html">Announcements</a></li>' +
-            '<li><a class="hover:text-white hover:underline" href="' + ROOT + 'pages/promos.html">Promos</a></li>' +
-            '<li><a class="hover:text-white hover:underline" href="' + ROOT + 'pages/profile.html">My profile</a></li></ul></nav>' +
-          '<div><p class="text-sm font-bold uppercase tracking-wide text-white">Help &amp; contact</p>' +
-            '<ul class="mt-3 space-y-2 text-sm"><li><a class="inline-flex items-center gap-2 hover:text-white hover:underline" href="mailto:' + Ui.escape(CONFIG.SUPPORT_EMAIL) + '">' + Ui.icon('mail', 'w-4 h-4') + Ui.escape(CONFIG.SUPPORT_EMAIL) + '</a></li>' +
-            '<li>Mon–Fri, 8:00–17:00</li>' +
-            '<li>Need an admin? Email us with the subject “Access request”.</li></ul></div>' +
+      '<footer class="site-footer mt-16 border-t border-line bg-[#F8FAFC]">' +
+        '<div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-muted md:flex-row md:items-center md:justify-between">' +
+          '<p>© ' + year + ' CivicEvents · Civic, campus and community events in Rwanda</p>' +
+          '<nav aria-label="Footer"><ul class="flex flex-wrap gap-x-5 gap-y-2">' +
+            links.map(function (l) { return '<li><a class="hover:text-ink hover:underline" href="' + Ui.escape(l[0]) + '">' + Ui.escape(l[1]) + '</a></li>'; }).join('') +
+          '</ul></nav>' +
         '</div>' +
-        '<div class="border-t border-white/10 px-4 py-4 text-center text-xs text-brand-200">© ' + year + ' CivicEvents+ · Built for the Advanced Frontend Development summative · Accessibility: keyboard navigable, screen-reader friendly</div>' +
       '</footer>'
     );
   }
 
-  /* ---------- Dropdowns + mobile menu (disclosure pattern) ---------- */
+  /* ---------- Dropdowns (profile/admin) ---------- */
   function closeDropdowns(except) {
     $('[data-dropdown]').each(function () {
       if (except && this === except) return;
       $(this).find('[data-dropdown-toggle]').attr('aria-expanded', 'false');
       $(this).children('div').addClass('hidden');
+    });
+  }
+
+  /* ---------- Explore menu (disclosure pattern, JetBlue-style panel) ----------
+   * Button with aria-expanded controls a panel of links.
+   *  - Click / Enter / Space toggles. Opening from the keyboard moves focus to the first link.
+   *  - ArrowDown on the button opens it; arrow keys / Home / End move between panel links.
+   *  - Escape closes and returns focus to the button; Tab out, or a click outside, closes it. */
+  function exploreOpen() { return $('#explore-toggle').attr('aria-expanded') === 'true'; }
+  function setExplore(open, focusFirst) {
+    $('#explore-toggle').attr('aria-expanded', String(open)).toggleClass('is-open', open);
+    $('#explore-panel').prop('hidden', !open);
+    if (open) { closeDropdowns(); if (focusFirst) $('#explore-panel [data-explore-link]').first().trigger('focus'); }
+  }
+  function bindExplore() {
+    var $toggle = $('#explore-toggle'), $panel = $('#explore-panel');
+    $toggle.on('click', function (e) { setExplore(!exploreOpen(), e.detail === 0); }); // detail 0 = keyboard activation
+    $toggle.on('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setExplore(true, true); }
+    });
+    $panel.on('keydown', function (e) {
+      var $links = $panel.find('[data-explore-link]'), i = $links.index(document.activeElement);
+      var next = { ArrowDown: i + 1, ArrowRight: i + 1, ArrowUp: i - 1, ArrowLeft: i - 1, Home: 0, End: $links.length - 1 }[e.key];
+      if (next === undefined) return;
+      e.preventDefault();
+      $links.eq((next + $links.length) % $links.length).trigger('focus');
+    });
+    // Close when focus leaves both the button and the panel (e.g. Tab past the last link).
+    $toggle.add($panel).on('focusout', function (e) {
+      var to = e.relatedTarget;
+      if (to && ($toggle[0] === to || $panel[0].contains(to))) return;
+      if (to) setExplore(false);
+    });
+    $(document).on('click', function (e) {
+      if (exploreOpen() && !$(e.target).closest('#explore-toggle, #explore-panel').length) setExplore(false);
     });
   }
 
@@ -187,6 +320,7 @@
       var $dd = $(this).closest('[data-dropdown]');
       var open = $(this).attr('aria-expanded') === 'true';
       closeDropdowns($dd[0]);
+      if (!open) setExplore(false);
       $(this).attr('aria-expanded', String(!open));
       $dd.children('div').toggleClass('hidden', open);
     });
@@ -194,21 +328,33 @@
       if (!$(e.target).closest('[data-dropdown]').length) closeDropdowns();
     });
     $(document).on('keydown', function (e) {
-      if (e.key === 'Escape') {
-        var $open = $('[data-dropdown-toggle][aria-expanded="true"]');
-        if ($open.length) { closeDropdowns(); $open.first().trigger('focus'); }
-      }
+      if (e.key !== 'Escape') return;
+      if (exploreOpen()) { setExplore(false); $('#explore-toggle').trigger('focus'); return; }
+      var $open = $('[data-dropdown-toggle][aria-expanded="true"]');
+      if ($open.length) { closeDropdowns(); $open.first().trigger('focus'); }
     });
+    bindExplore();
 
     $('#mobile-toggle').on('click', function () {
       var open = $(this).attr('aria-expanded') === 'true';
       $(this).attr({ 'aria-expanded': String(!open), 'aria-label': open ? 'Open menu' : 'Close menu' });
       $('#mobile-nav').toggleClass('hidden', open);
     });
+    $('#m-explore-toggle').on('click', function () {
+      var open = $(this).attr('aria-expanded') === 'true';
+      $(this).attr('aria-expanded', String(!open));
+      $('#m-explore-list').prop('hidden', open);
+    });
 
     $('#logout-btn').on('click', function () {
       Auth.logout('You have been logged out.', 'success');
     });
+  }
+
+  function mountShell() {
+    // Mount points for the shared header/footer; created if the page doesn't declare them.
+    if (!$('#app-header').length) $('body').prepend('<div id="app-header"></div>');
+    if (!$('#app-footer').length) $('body').append('<div id="app-footer"></div>');
   }
 
   /* ---------- Public entry point ---------- */
@@ -224,15 +370,32 @@
       return true;
     }
 
+    var signedIn = Auth.isLoggedIn();
+    if (access === 'public') {
+      // Home page: no guard. Signed-in visitors get the full header, guests get Log in / Sign up.
+      mountShell();
+      renderHeader(opts.active, signedIn, false);
+      renderFooter();
+      Auth.applyRoleVisibility($('#app-header'));
+      bindHeader();
+      if (signedIn) Notifications.init();
+      return true;
+    }
+
     // GUARD 1 — must be logged in (redirects to login.html otherwise)
     if (!Auth.requireAuth()) return false;
 
-    // Mount points for the shared header/footer; created if the page doesn't declare them.
-    if (!$('#app-header').length) $('body').prepend('<div id="app-header"></div>');
-    if (!$('#app-footer').length) $('body').append('<div id="app-footer"></div>');
-
-    renderHeader(opts.active);
+    mountShell();
+    if (access === 'admin' && Auth.isAdmin()) {
+      // Admin workspace: sidebar + slim top bar, no public navigation or footer.
+      renderAdminShell(String($('body').data('page') || opts.active));
+      bindAdminShell();
+      Notifications.init();
+      return true;
+    }
+    renderHeader(opts.active, true, false);
     renderFooter();
+    $('body').addClass('app-canvas'); // signed-in app pages use the light grey canvas
     // GUARD 3 — strip data-role="admin"/"user" elements that don't match the current role
     Auth.applyRoleVisibility($('#app-header'));
     bindHeader();

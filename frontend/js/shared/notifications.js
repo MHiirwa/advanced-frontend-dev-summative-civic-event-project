@@ -77,6 +77,7 @@
     var $badge = $('#notif-badge');
     $badge.text(n > 9 ? '9+' : n).toggleClass('hidden', n === 0);
     $('#notif-bell').attr('aria-label', 'Notifications' + (n ? ', ' + n + ' unread' : ''));
+    $('[data-unread-count]').text(n > 99 ? '99+' : n).prop('hidden', n === 0).attr('aria-label', n + ' unread');
   }
 
   /* ---------- Drawer ---------- */
