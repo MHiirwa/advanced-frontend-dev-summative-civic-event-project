@@ -12,90 +12,92 @@
   var App = window.App, C = App.C, page = App.page, admin = App.adminArea;
   var boot = App.boot, put = App.put, fail = App.fail;
   var showList = App.showList, queryBar = App.queryBar, filterCards = App.filterCards;
-  /* =================================================================
-   * Events list: search + date range + location filters and pagination (9 per page).
-   * The API has no query parameters for any of this, so it all runs client-side on the
-   * cached GET /events result. Filter state is mirrored in the URL (?q=&from=&to=&loc=&page=)
-   * so the back button and shared links keep the same view.
-   * ================================================================= */
   var EVENTS_PER_PAGE = 9;
+  /**
+   * Events list: search, community, date range, location, past events, sort, pagination.
+   * Filtering is client-side via the shared Civic.filterEvents (the API has no query
+   * parameters). Filter state is mirrored in the URL (?q=&community=&from=&to=&loc=&past=&sort=&page=)
+   * so links from the community pages, the back button and shared links keep the same view.
+   */
   function events() {
     showList('events', '/events', function (items) {
       var params = new URLSearchParams(location.search);
       var locations = items.map(function (e) { return (e.location || '').trim(); }).filter(function (l, i, a) { return l && a.indexOf(l) === i; }).sort();
-      put('<section class="hero-strip"><div><p class="eyebrow">BE PART OF IT</p><h2>Make time for your community.</h2><p>Discover upcoming gatherings, workshops and civic moments.</p></div>' +
-          // ROLE GUARD (UX only): "My registrations" is a normal-user page.
-          (admin ? '' : '<a class="btn btn-primary" href="my-registrations.html">My registrations</a>') + '</section>' +
-        '<form id="event-filters" class="card mt-6 p-4" role="search" aria-label="Filter events" novalidate>' +
-          '<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">' +
-            '<div class="sm:col-span-2"><label class="label" for="filter">Search</label><input id="filter" class="input" type="search" placeholder="Title, description or location…" value="' + Ui.escape(params.get('q') || '') + '"></div>' +
+      var communityOpts = Object.keys(Civic.COMMUNITIES).map(function (k) { return '<option value="' + k + '">' + Ui.escape(Civic.COMMUNITIES[k].title) + '</option>'; }).join('');
+      // ROLE GUARD (UX only): admins get a shortcut to create an event; the page itself is for every signed-in user.
+      if (Auth.isAdmin()) App.actions('<a class="btn btn-primary btn-sm" href="../admin/create-event.html">' + Ui.icon('plus', 'w-4 h-4') + 'Create event</a>');
+      put('<form id="event-filters" class="card p-4" role="search" aria-label="Filter events" novalidate>' +
+          '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1.2fr_1fr_1fr_1.2fr]">' +
+            '<div class="sm:col-span-2 lg:col-span-1"><label class="label" for="filter">Search</label><input id="filter" class="input" type="search" placeholder="Title, description or location…" value="' + Ui.escape(params.get('q') || '') + '"></div>' +
+            '<div><label class="label" for="f-community">Community</label><select id="f-community" class="input"><option value="">All communities</option>' + communityOpts + '</select></div>' +
             '<div><label class="label" for="f-from">From</label><input id="f-from" class="input" type="date" value="' + Ui.escape(params.get('from') || '') + '"></div>' +
             '<div data-field><label class="label" for="f-to">To</label><input id="f-to" class="input" type="date" value="' + Ui.escape(params.get('to') || '') + '"><p data-error id="f-to-error" class="field-error hidden"></p></div>' +
             '<div><label class="label" for="f-loc">Location</label><input id="f-loc" class="input" type="text" list="loc-options" placeholder="Any location" value="' + Ui.escape(params.get('loc') || '') + '">' +
               '<datalist id="loc-options">' + locations.map(function (l) { return '<option value="' + Ui.escape(l) + '">'; }).join('') + '</datalist></div>' +
           '</div>' +
-          '<div class="mt-4 flex flex-wrap items-center justify-between gap-3">' +
-            '<div class="flex items-center gap-2"><label class="label !mb-0" for="sort">Sort</label><select id="sort" class="input !w-auto"><option value="date">Event date (soonest first)</option><option value="new">Recently added</option></select></div>' +
-            '<button type="button" id="clear-filters" class="btn btn-ghost btn-small">Clear filters</button>' +
+          '<div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">' +
+            '<div class="flex items-center gap-2"><label class="label !mb-0" for="sort">Sort</label><select id="sort" class="input !w-auto !min-h-0 !py-1.5 text-sm"><option value="date">Event date</option><option value="new">Recently added</option></select></div>' +
+            '<label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" id="f-past" class="h-4 w-4"> Include past events</label>' +
+            '<button type="button" id="clear-filters" class="btn btn-ghost btn-sm ml-auto">Clear filters</button>' +
           '</div>' +
+          '<p id="community-note" class="mt-3 text-xs text-muted" hidden></p>' +
         '</form>' +
         '<h2 id="results-title" class="sr-only" tabindex="-1">Event results</h2>' +
-        '<p id="results-count" class="mt-6 text-sm text-muted" role="status" aria-live="polite"></p>' +
+        '<p id="results-count" class="mt-5 text-sm text-muted" role="status" aria-live="polite"></p>' +
         '<div id="cards" class="card-grid mt-3"></div>' +
         '<nav id="pager" class="mt-8" aria-label="Events pages"></nav>');
       if (params.get('sort')) $('#sort').val(params.get('sort'));
-      var page = Math.max(1, parseInt(params.get('page'), 10) || 1);
+      if (Civic.COMMUNITIES[params.get('community')]) $('#f-community').val(params.get('community'));
+      $('#f-past').prop('checked', params.get('past') === '1');
+      var page = Math.max(1, parseInt(params.get('page'), 10) || 1), regs = {};
 
-      function dayStart(v) { return v ? new Date(v + 'T00:00:00') : null; }
-      function dayEnd(v) { return v ? new Date(v + 'T23:59:59.999') : null; }
       function apply(moveFocus) {
-        var q = $('#filter').val().trim().toLowerCase(), loc = $('#f-loc').val().trim().toLowerCase();
-        var fromV = $('#f-from').val(), toV = $('#f-to').val(), from = dayStart(fromV), to = dayEnd(toV);
-        var badRange = from && to && to < from;
-        Ui.setFieldError($('#f-to'), badRange ? '"To" must be on or after "From".' : '');
-        var arr = items.filter(function (e) {
-          var start = e.starts_at ? new Date(e.starts_at) : null, end = e.ends_at ? new Date(e.ends_at) : start;
-          if (q && [e.title, e.description, e.location].join(' ').toLowerCase().indexOf(q) === -1) return false;
-          if (loc && (e.location || '').toLowerCase().indexOf(loc) === -1) return false;
-          if (!badRange && (from || to)) {
-            if (!start) return false;                  // undated events can't match a date range
-            if (from && end < from) return false;      // finished before the range starts
-            if (to && start > to) return false;        // starts after the range ends
-          }
-          return true;
-        });
-        arr.sort($('#sort').val() === 'new'
-          ? function (a, b) { return new Date(b.created_at || 0) - new Date(a.created_at || 0); }
-          : function (a, b) { return new Date(a.starts_at || 8.64e15) - new Date(b.starts_at || 8.64e15); });
+        var community = $('#f-community').val(), past = $('#f-past').is(':checked');
+        var arr = Civic.filterEvents(items, { q: $('#filter').val(), loc: $('#f-loc').val(), from: $('#f-from').val(), to: $('#f-to').val(),
+          community: community, upcomingOnly: !past, sort: $('#sort').val() });
+        Ui.setFieldError($('#f-to'), arr.badRange ? '"To" must be on or after "From".' : '');
+        $('#community-note').prop('hidden', !community).text(community
+          ? Civic.COMMUNITIES[community].title + ': events whose title, description or location mention ' + Civic.COMMUNITIES[community].keywords.slice(0, 6).join(', ') + '…'
+          : '');
 
         var pages = Math.max(1, Math.ceil(arr.length / EVENTS_PER_PAGE));
         page = Math.min(page, pages);
         var shown = arr.slice((page - 1) * EVENTS_PER_PAGE, page * EVENTS_PER_PAGE);
-        var filtered = q || loc || fromV || toV;
+        var filtered = $('#filter').val().trim() || $('#f-loc').val().trim() || $('#f-from').val() || $('#f-to').val() || community || past;
         $('#results-count').text(arr.length
           ? 'Showing ' + ((page - 1) * EVENTS_PER_PAGE + 1) + '–' + ((page - 1) * EVENTS_PER_PAGE + shown.length) + ' of ' + arr.length + ' event' + (arr.length === 1 ? '' : 's') + (pages > 1 ? ' (page ' + page + ' of ' + pages + ')' : '')
           : '');
         // ROLE GUARD (UX only): C.eventCard(e, admin) adds Edit/Delete only on admin/ pages.
-        $('#cards').html(shown.length ? shown.map(function (e) { return C.eventCard(e, admin); }).join('')
-          : filtered ? C.empty('No matching events', 'Try a different search, date range or location.') : C.empty('No published events yet', 'Check back soon for something happening near you.'));
+        $('#cards').html(shown.length ? shown.map(function (e) { return C.eventCard(e, admin, { registration: regs[String(e.id)] }); }).join('')
+          : filtered ? C.empty('No matching events', 'Try a different search, community, date range or location, or include past events.', 'search')
+            : C.empty('No upcoming events', 'Published events will appear here.', 'calendar'));
         $('#pager').html(C.pagination(page, pages));
         $('#clear-filters').prop('disabled', !filtered);
 
         var p = new URLSearchParams();
-        if (q) p.set('q', $('#filter').val().trim()); if (fromV) p.set('from', fromV); if (toV) p.set('to', toV);
-        if (loc) p.set('loc', $('#f-loc').val().trim()); if ($('#sort').val() !== 'date') p.set('sort', $('#sort').val()); if (page > 1) p.set('page', page);
+        if ($('#filter').val().trim()) p.set('q', $('#filter').val().trim());
+        if (community) p.set('community', community);
+        if ($('#f-from').val()) p.set('from', $('#f-from').val());
+        if ($('#f-to').val()) p.set('to', $('#f-to').val());
+        if ($('#f-loc').val().trim()) p.set('loc', $('#f-loc').val().trim());
+        if (past) p.set('past', '1');
+        if ($('#sort').val() !== 'date') p.set('sort', $('#sort').val());
+        if (page > 1) p.set('page', page);
         history.replaceState(null, '', location.pathname + (p.toString() ? '?' + p : ''));
         if (moveFocus) { $('#results-title').trigger('focus'); $('#results-title')[0].scrollIntoView({ block: 'start', behavior: 'smooth' }); }
       }
       var debounced = Ui.debounce(function () { page = 1; apply(false); }, 200);
       $('#filter, #f-loc').on('input', debounced);
-      $('#f-from, #f-to, #sort').on('change', function () { page = 1; apply(false); });
+      $('#f-from, #f-to, #sort, #f-community, #f-past').on('change', function () { page = 1; apply(false); });
       $('#event-filters').on('submit', function (e) { e.preventDefault(); });
-      $('#clear-filters').on('click', function () { $('#filter, #f-loc, #f-from, #f-to').val(''); page = 1; apply(false); $('#filter').trigger('focus'); });
+      $('#clear-filters').on('click', function () { $('#filter, #f-loc, #f-from, #f-to, #f-community').val(''); $('#f-past').prop('checked', false); page = 1; apply(false); $('#filter').trigger('focus'); });
       $('#pager').on('click', '[data-page]', function () { page = Number($(this).attr('data-page')); apply(true); });
       apply(false);
-    }, 'Events', 'Find your next way to show up.', 'events');
+      // Registration chips load after the list so a slow call never blocks browsing.
+      App.myRegistrations().done(function (map) { regs = map; if (!$.isEmptyObject(map)) apply(false); });
+    }, 'Events', '', 'events');
   }
+
   /* =================================================================
    * Event detail page (pages/event-details.html?id=…)
    * Layout: image + description | when/where + registration (user),
@@ -143,7 +145,7 @@
       var img = C.eventImage(ev);
       var mapUrl = ev.location ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(ev.location) : null;
       $('main h1').first().text(ev.title);
-      document.title = ev.title + ' · CivicEvents+';
+      document.title = ev.title + ' · CivicEvents';
       put(back() +
         '<div class="mt-4 grid gap-6 lg:grid-cols-3">' +
           '<article class="card overflow-hidden lg:col-span-2" aria-labelledby="about-title">' +
