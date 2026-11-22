@@ -23,7 +23,7 @@ $(function () {
     special: { label: 'A special character (e.g. ! @ # $)', test: function (p) { return /[\W_]/.test(p); } }
   };
   var LEVELS = [
-    { text: 'enter a password', color: '#dbe7e3', cls: 'text-muted' },
+    { text: 'enter a password', color: '#E2E1DA', cls: 'text-muted' },
     { text: 'very weak', color: '#b42318', cls: 'text-red-700' },
     { text: 'weak', color: '#b42318', cls: 'text-red-700' },
     { text: 'fair', color: '#b45309', cls: 'text-amber-700' },
@@ -49,7 +49,7 @@ $(function () {
     var level = LEVELS[score];
 
     $('#strength-bar .strength-seg').each(function (i) {
-      $(this).css('background-color', i < score ? level.color : '#dbe7e3');
+      $(this).css('background-color', i < score ? level.color : '#E2E1DA');
     });
     $('#strength-text').text(level.text).attr('class', 'font-semibold ' + level.cls);
 

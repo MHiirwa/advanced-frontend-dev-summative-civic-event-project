@@ -23,6 +23,12 @@ $(function () {
     $toggle.html(Ui.icon(show ? 'eyeoff' : 'eye', 'w-5 h-5')).attr({ 'aria-pressed': String(show), 'aria-label': show ? 'Hide password' : 'Show password' });
   });
 
+  // "Forgot password?" carries the email already typed over to the reset page.
+  $('a[href="forgot-password.html"]').on('click', function () {
+    var email = $.trim($email.val());
+    if (email) this.href = 'forgot-password.html?email=' + encodeURIComponent(email);
+  });
+
   function validate() {
     var ok = true;
     var email = $.trim($email.val());
@@ -42,7 +48,8 @@ $(function () {
 
   function finish(user) {
     Ui.flash('Welcome back, ' + user.full_name.split(' ')[0] + '!', 'success');
-    window.location.href = Auth.homeFor(user);
+    // Back to the page the user originally asked for (same-site only), else their home.
+    window.location.href = Auth.takeReturnUrl() || Auth.homeFor(user);
   }
 
   $form.on('submit', function (e) {
@@ -58,7 +65,9 @@ $(function () {
       .done(function (res) {
         var token = res.data.token;
         var user = res.data.user;
-        Auth.save(token, user, false);
+        // "Remember me": localStorage keeps the session after the browser closes (until the 1-hour
+        // token expires); otherwise sessionStorage, which is cleared when the tab closes.
+        Auth.save(token, user, $('#remember').is(':checked'));
 
         // The backend's auth middleware does not reject disabled accounts, so we check
         // is_active ourselves via the profile endpoint and block them here.
