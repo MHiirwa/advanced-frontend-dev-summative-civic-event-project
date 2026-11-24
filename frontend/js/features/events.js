@@ -26,7 +26,12 @@
       var communityOpts = Object.keys(Civic.COMMUNITIES).map(function (k) { return '<option value="' + k + '">' + Ui.escape(Civic.COMMUNITIES[k].title) + '</option>'; }).join('');
       // ROLE GUARD (UX only): admins get a shortcut to create an event; the page itself is for every signed-in user.
       if (Auth.isAdmin()) App.actions('<a class="btn btn-primary btn-sm" href="../admin/create-event.html">' + Ui.icon('plus', 'w-4 h-4') + 'Create event</a>');
+      // Mobile-first: on phones the filters sit behind a "Filters" button (with the number of active
+      // filters) so the results are visible without scrolling; from 641px up they are always shown.
       put('<form id="event-filters" class="card p-4" role="search" aria-label="Filter events" novalidate>' +
+          '<button type="button" id="filters-toggle" class="filters-toggle btn btn-secondary btn-sm w-full justify-between" aria-expanded="false" aria-controls="filters-body">' +
+            '<span class="inline-flex items-center gap-2">' + Ui.icon('search', 'w-4 h-4') + 'Search &amp; filters</span><span id="filters-active" class="chip chip-blue" hidden></span></button>' +
+          '<div id="filters-body" class="filters-body">' +
           '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1.2fr_1fr_1fr_1.2fr]">' +
             '<div class="sm:col-span-2 lg:col-span-1"><label class="label" for="filter">Search</label><input id="filter" class="input" type="search" placeholder="Title, description or location…" value="' + Ui.escape(params.get('q') || '') + '"></div>' +
             '<div><label class="label" for="f-community">Community</label><select id="f-community" class="input"><option value="">All communities</option>' + communityOpts + '</select></div>' +
@@ -41,6 +46,7 @@
             '<button type="button" id="clear-filters" class="btn btn-ghost btn-sm ml-auto">Clear filters</button>' +
           '</div>' +
           '<p id="community-note" class="mt-3 text-xs text-muted" hidden></p>' +
+          '</div>' +
         '</form>' +
         '<h2 id="results-title" class="sr-only" tabindex="-1">Event results</h2>' +
         '<p id="results-count" class="mt-5 text-sm text-muted" role="status" aria-live="polite"></p>' +
@@ -73,6 +79,8 @@
             : C.empty('No upcoming events', 'Published events will appear here.', 'calendar'));
         $('#pager').html(C.pagination(page, pages));
         $('#clear-filters').prop('disabled', !filtered);
+        var active = [$('#filter').val().trim(), $('#f-loc').val().trim(), $('#f-from').val(), $('#f-to').val(), community, past ? '1' : ''].filter(Boolean).length;
+        $('#filters-active').prop('hidden', !active).text(active + ' active');
 
         var p = new URLSearchParams();
         if ($('#filter').val().trim()) p.set('q', $('#filter').val().trim());
@@ -90,6 +98,10 @@
       $('#filter, #f-loc').on('input', debounced);
       $('#f-from, #f-to, #sort, #f-community, #f-past').on('change', function () { page = 1; apply(false); });
       $('#event-filters').on('submit', function (e) { e.preventDefault(); });
+      function setFilters(open) { $('#filters-toggle').attr('aria-expanded', String(open)); $('#filters-body').prop('hidden', !open); }
+      // Collapsed on phones unless the link already carries filters.
+      setFilters(!window.matchMedia('(max-width: 640px)').matches || !!(params.get('q') || params.get('loc') || params.get('from') || params.get('to') || params.get('community') || params.get('past')));
+      $('#filters-toggle').on('click', function () { var open = $(this).attr('aria-expanded') !== 'true'; setFilters(open); if (open) $('#filter').trigger('focus'); });
       $('#clear-filters').on('click', function () { $('#filter, #f-loc, #f-from, #f-to, #f-community').val(''); $('#f-past').prop('checked', false); page = 1; apply(false); $('#filter').trigger('focus'); });
       $('#pager').on('click', '[data-page]', function () { page = Number($(this).attr('data-page')); apply(true); });
       apply(false);
@@ -149,7 +161,7 @@
       put(back() +
         '<div class="mt-4 grid gap-6 lg:grid-cols-3">' +
           '<article class="card overflow-hidden lg:col-span-2" aria-labelledby="about-title">' +
-            (img ? '<img src="' + Ui.escape(img) + '" alt="Image for ' + Ui.escape(ev.title) + '" class="h-64 w-full object-cover sm:h-80">'
+            (img ? '<img src="' + Ui.escape(img) + '" alt="Image for ' + Ui.escape(ev.title) + '" class="h-64 w-full object-cover sm:h-80" data-fallback-date="' + Ui.escape(ev.starts_at || '') + '">'
                  : '<div class="flex h-48 items-center justify-center bg-brand-50 text-brand-700" aria-hidden="true">' + Ui.icon('calendar', 'w-12 h-12') + '</div>') +
             '<div class="p-6">' +
               // ROLE GUARD (UX only): publication status is admin information.
@@ -174,7 +186,9 @@
         // ROLE GUARD (UX only): users see/edit only their own feedback; admins get the full registrants/feedback panel.
         (isAdmin
           ? '<section id="admin-panel" class="mt-8" aria-labelledby="admin-title"><h2 id="admin-title" class="' + H2 + '">Registrants &amp; feedback</h2><div id="admin-panel-body" class="mt-4">' + Ui.skeletonRows(3) + '</div></section>'
-          : '<section id="feedback-box" class="card mt-8 p-6" aria-labelledby="fb-title"><h2 id="fb-title" class="' + H2 + '">Your feedback</h2><div id="feedback-body" class="mt-4">' + Ui.skeletonRows(1) + '</div></section>'));
+          : '<section id="feedback-box" class="card mt-8 p-6" aria-labelledby="fb-title"><h2 id="fb-title" class="' + H2 + '">Your feedback</h2>' +
+              '<p class="mt-1 text-sm text-muted">One rating per event; you can edit it any time. The event\'s average rating and all reviews are shared with the organisers.</p>' +
+              '<div id="feedback-body" class="mt-4">' + Ui.skeletonRows(1) + '</div></section>'));
       if (isAdmin) loadAdminPanel(); else { loadRegistration(); loadFeedback(); }
     }
 
@@ -199,14 +213,14 @@
         body = '<p class="text-sm text-muted">Reserve your place at this event.</p><button type="button" id="do-reg" class="btn btn-primary mt-4 w-full">Register</button>';
       }
       $('#registration-box').html('<h2 id="reg-title" class="' + H2 + '">Registration</h2><div class="mt-4">' + body + '</div>');
+      // Optimistic UI: show "registered" straight away; if the API refuses, go back and explain.
       $('#do-reg').on('click', function () {
-        var $b = $(this); Ui.setLoading($b, true, 'Registering…');
+        renderRegistration('registered'); $('#cancel-reg').trigger('focus');
         Api.post('/event-registrations/register', { event_id: ev.id }).done(function () {
-          Ui.toast('You are registered for this event.', 'success'); renderRegistration('registered'); $('#cancel-reg').trigger('focus');
+          Ui.toast('You are registered for this event.', 'success');
         }).fail(function (err) {
-          Ui.setLoading($b, false);
           if (err.status === 409) { Ui.toast('You already have a registration for this event.', 'warning'); loadRegistration(); }
-          else Api.toastError(err);
+          else { renderRegistration(null); $('#do-reg').trigger('focus'); Api.toastError(err); }
         });
       });
       $('#cancel-reg').on('click', function () {

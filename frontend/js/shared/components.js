@@ -82,6 +82,16 @@
    *    admin manage buttons sit above it.
    * ROLE GUARD (UX only): `admin` adds the Published/Draft pill + Edit/Delete (admin/ pages only).
    */
+  /** Plain-text excerpt for cards: whitespace collapsed, cut at a word boundary. */
+  C.excerpt = function (text, max) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim(); max = max || 110;
+    if (t.length <= max) return t;
+    return t.slice(0, max).replace(/\s+\S*$/, '') + '…';
+  };
+  /** Date panel shown when an event has no image, or when its image fails to load. */
+  C.datePanel = function (d) {
+    return '<span class="ev-date-panel">' + (d ? '<span>' + d.toLocaleDateString(undefined, { month: 'short' }) + '</span><strong>' + d.getDate() + '</strong>' : '<span>Date TBA</span>') + '</span>';
+  };
   C.eventCard = function (e, admin, opts) {
     opts = opts || {};
     var image = C.eventImage(e), st = Civic.status(e), d = e.starts_at ? new Date(e.starts_at) : null;
@@ -95,14 +105,15 @@
       : (!Auth.isAdmin() && st !== 'completed' ? '<button type="button" class="ev-register text-link" data-id="' + Ui.escape(e.id) + '" aria-label="Register for ' + Ui.escape(e.title) + '">Register' + Ui.icon('arrowRight', 'w-4 h-4') + '</button>' : '');
     return '<article class="card ev-card">' +
       '<a class="ev-media" href="' + href + '" tabindex="-1" aria-hidden="true">' +
-        (image ? '<img src="' + Ui.escape(image) + '" alt="" loading="lazy">'
-               : '<span class="ev-date-panel">' + (d ? '<span>' + d.toLocaleDateString(undefined, { month: 'short' }) + '</span><strong>' + d.getDate() + '</strong>' : '<span>Date TBA</span>') + '</span>') +
+        (image ? '<img src="' + Ui.escape(image) + '" alt="" loading="lazy" data-fallback-date="' + Ui.escape(e.starts_at || '') + '">' : C.datePanel(d)) +
       '</a>' +
       '<div class="ev-body">' +
         (community ? '<p class="dc-kicker">' + Ui.escape(community) + '</p>' : '') +
         '<h3 class="dc-title"><a href="' + href + '">' + Ui.escape(e.title) + '</a></h3>' +
         '<p class="text-sm text-muted">' + Ui.escape(when) + ' · ' + Ui.escape(e.location || 'Location to be announced') + '</p>' +
-        ((chips || action) ? '<div class="ev-foot">' + (chips ? '<span class="flex flex-wrap gap-1">' + chips + '</span>' : '') + '<span class="ev-action">' + action + '</span></div>' : '') +
+        (e.description ? '<p class="ev-desc clamp">' + Ui.escape(C.excerpt(e.description)) + '</p>' : '') +
+        '<div class="ev-foot">' + (chips ? '<span class="flex flex-wrap gap-1">' + chips + '</span>' : '') +
+          '<span class="ev-action flex items-center gap-4"><a class="ev-view text-link" href="' + href + '" aria-label="View details for ' + Ui.escape(e.title) + '">View</a>' + action + '</span></div>' +
       '</div>' +
       (admin ? '<div class="ec-admin">' + C.manageActions(e, 'events') + '</div>' : '') +
     '</article>';
@@ -281,6 +292,15 @@
   function scanLazy(root) { $(root).find('video[data-lazy-src]').each(function () { lazyIO ? lazyIO.observe(this) : loadThumb(this); }); }
   new MutationObserver(function (muts) { muts.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) scanLazy(n); }); }); })
     .observe(document.documentElement, { childList: true, subtree: true });
+  // Event image that can't load (deleted file, wrong host): swap in the date panel so no broken-image icon shows.
+  document.addEventListener('error', function (e) {
+    var img = e.target;
+    if (img.tagName !== 'IMG' || !img.hasAttribute('data-fallback-date')) return;
+    var iso = img.getAttribute('data-fallback-date'), d = iso ? new Date(iso) : null;
+    var $wrap = $(img).parent();
+    if ($wrap.hasClass('ev-media')) { $wrap.addClass('img-failed'); $(img).replaceWith(C.datePanel(d && !isNaN(d) ? d : null)); }
+    else $(img).replaceWith('<div class="flex h-48 items-center justify-center bg-brand-50 text-brand-700" role="img" aria-label="Image unavailable">' + Ui.icon('calendar', 'w-12 h-12') + '</div>');
+  }, true);
   document.addEventListener('error', function (e) { // video that can't load: keep the dark tile with the play icon
     if (e.target.tagName === 'VIDEO' && e.target.closest('.promo-thumb')) e.target.style.visibility = 'hidden';
   }, true);
@@ -288,15 +308,16 @@
   /* ---------- Register from any event card (events list, community pages, search, dashboard) ----------
    * POST /event-registrations/register. The API returns 409 if the user already has a registration
    * for that event, including a cancelled one (re-registering is not allowed). */
+  // Optimistic UI: the "Registered" chip shows immediately; if the API call fails, the button
+  // comes back (focus restored) and the error is explained.
   $(document).on('click', '.ev-register', function () {
-    var $b = $(this), id = $b.attr('data-id');
-    Ui.setLoading($b, true, 'Registering…');
+    var $b = $(this), id = $b.attr('data-id'), $slot = $('<span class="ev-optimistic"></span>').html(C.statusChip('registered'));
+    $b.after($slot).detach();
     Api.post('/event-registrations/register', { event_id: id }).done(function () {
-      $b.closest('.ev-action').html(C.statusChip('registered'));
       Ui.toast('You are registered.', 'success');
       $(document).trigger('ce:registered', [id]);
     }).fail(function (err) {
-      Ui.setLoading($b, false);
+      $slot.replaceWith($b); $b.trigger('focus');
       if (err.status === 409) Ui.toast('You already have a registration for this event (re-registering after cancelling isn\'t possible).', 'warning');
       else Api.toastError(err);
     });

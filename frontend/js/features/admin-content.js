@@ -68,7 +68,7 @@
     $('#m-q').on('input', Ui.debounce(render, 150)); $('#m-filter').on('change', render);
     $('#m-table').on('click', '.m-delete', function () {
       var x = find($(this).attr('data-id')), $b = $(this); if (!x) return;
-      Ui.confirm({ title: 'Delete “' + x.title + '”?', message: 'This permanently removes the ' + LABEL + (type === 'events' ? ', its registrations and feedback.' : '.') + ' It cannot be undone.', confirmText: 'Delete', danger: true }).then(function (ok) {
+      Ui.confirm({ title: 'Delete “' + x.title + '”?', message: 'This permanently removes the ' + LABEL + (type === 'events' ? ' and its feedback. Events that anyone has registered for (even if they cancelled) can\'t be deleted.' : '.') + ' It cannot be undone.', confirmText: 'Delete', danger: true }).then(function (ok) {
         if (!ok) return;
         Ui.setLoading($b, true, 'Deleting…');
         Api.del(endpoint + '/' + encodeURIComponent(x.id)).done(function () { Ui.toast('“' + x.title + '” was deleted.', 'success'); load(); })
