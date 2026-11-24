@@ -193,7 +193,10 @@ frontend works around it as follows:
 | **No user list total.** `GET /users` pages by 20 without a count. | Admin users list shows Previous/Next only, and Next is disabled when a page has fewer than 20 rows. |
 | **No password reset endpoint.** | `forgot-password.html` (linked from login) checks the email and prepares a reset request email to `CONFIG.SUPPORT_EMAIL`; it does not change any password. It is meant for user accounts only and says that administrator passwords are reset by the system owner. |
 | **Not in the API:** service requests, broadcast notifications, event drafts. | Not built; no UI pretends they exist. |
-| Dashboard counts are strings (PostgreSQL `COUNT`). | Converted with `parseInt` before display and charting. User growth months with no sign-ups are filled in as 0. |
+| Dashboard counts are strings (PostgreSQL `COUNT`). | Converted with `parseInt` before display and charting. User growth months with no sign-ups are filled in as 0 in the "New users per month" chart. |
+| **No aggregate endpoints for registrations/feedback.** | The admin dashboard and registrations overview call the per-event endpoints through `Api.pool()` (at most 4 requests in flight). The dashboard refreshes itself every 60 s while the tab is visible and updates its two charts in place. |
+| **Disabled accounts keep working with an existing token** (the auth middleware doesn't check `is_active`). | Login refuses disabled accounts, and every signed-in page re-checks `GET /users/profile/me` (cached 60 s); a disabled account is signed out with a message. |
+| **Events with registrations can't be deleted** (`event_registrations` has no `ON DELETE CASCADE`, so the API returns a 500 with a database message). | The delete dialog says so up front, and the error is shown as a plain-language message. In general, 5xx bodies are never shown raw: `api.js` translates known ones (file too large, wrong file type, constraint errors) and uses a generic message otherwise. |
 
 Upload limits are checked in the browser before sending, matching the backend's
 upload middleware: images 2 MB (jpg, jpeg, png, gif), audio 5 MB (mp3, wav, m4a,
@@ -201,7 +204,15 @@ ogg), video 8 MB (mp4, mov, avi, mkv). They are set in `CONFIG.UPLOADS`.
 
 ---
 
-## 5. Design and images
+## 5. UX details worth knowing
+
+- **Navigation.** Users: Home · Explore events · My registrations · Announcements · Promos. Admins: Home · Explore events · Announcements · Promos · Dashboard · Admin, plus admin shortcuts in the profile menu. A search box sits in the header on wide screens (icon link below 1280 px, search field in the mobile menu). Admin pages have their own top bar with search, "View site" and the same notification bell and drawer.
+- **Optimistic UI.** Registering (from a card or the event page) shows "Registered" immediately; if the API refuses, the button comes back with focus and the error is explained. Marking notifications read is client-side only, so there is nothing to revert.
+- **Mobile-first.** Card and KPI grids start at one column and grow with `min-width` breakpoints. On phones the events filters are behind a "Search & filters" button that shows how many filters are active.
+- **Images.** If an event image fails to load, the card shows its date panel instead of a broken-image icon.
+- **Accessibility.** Field errors are added to a field's existing hints (`aria-describedby`) instead of replacing them. "My registrations" uses ARIA tabs with arrow-key navigation and a tab panel.
+
+## 6. Design and images
 
 The layout follows five mock-ups: centred login/sign-up cards, a split home hero,
 a personal dashboard (stats strip, upcoming list, updates, discover cards) and an
