@@ -37,9 +37,9 @@
   /**
    * Primary nav by audience. ROLE GUARD (UX only):
    *  - guests:  Home · Explore events · Announcements · Promos
-   *  - users:   Home · Explore events · My registrations · Announcements (Promos stays in the
-   *             Explore menu and footer)
-   *  - admins:  Home · Explore events · Announcements · Promos · Admin (one link to the admin workspace)
+   *  - users:   Home · Explore events · My registrations · Announcements · Promos
+   *  - admins:  Home · Explore events · Announcements · Promos · Dashboard · Admin
+   *             (Dashboard = admin overview, Admin = content management)
    */
   function navFor(signedIn) {
     var home = { key: 'home', label: 'Home', href: ROOT + 'index.html' },
@@ -47,8 +47,10 @@
         ann = { key: 'announcements', label: 'Announcements', href: ROOT + 'pages/announcements.html' },
         promos = { key: 'promos', label: 'Promos', href: ROOT + 'pages/promos.html' };
     if (!signedIn) return [home, explore, ann, promos];
-    if (Auth.isAdmin()) return [home, explore, ann, promos, { key: 'admin', label: 'Admin', href: ROOT + 'admin/dashboard.html' }];
-    return [home, explore, { key: 'my-registrations', label: 'My registrations', href: ROOT + 'pages/my-registrations.html' }, ann];
+    if (Auth.isAdmin()) return [home, explore, ann, promos,
+      { key: 'admin-dashboard', label: 'Dashboard', href: ROOT + 'admin/dashboard.html' },
+      { key: 'admin', label: 'Admin', href: ROOT + 'admin/events.html' }];
+    return [home, explore, { key: 'my-registrations', label: 'My registrations', href: ROOT + 'pages/my-registrations.html' }, ann, promos];
   }
 
   // ROLE GUARD (UX only): admin destinations. They are tagged data-role="admin" in the header,
@@ -121,7 +123,10 @@
     var right = signedIn
       // Right-hand group, all vertically centred with equal gaps: search, notifications, account.
       // Search opens pages/search.html (no backend search endpoint; results are filtered client-side).
-      ? '<a href="' + ROOT + 'pages/search.html" class="hidden rounded-full p-2 text-ink hover:bg-brand-50 sm:inline-flex" aria-label="Search">' + Ui.icon('search', 'w-5 h-5') + '</a>' +
+      ? '<form role="search" action="' + ROOT + 'pages/search.html" method="get" class="header-search hidden xl:flex">' +
+          '<label for="global-search" class="sr-only">Search events, announcements and promos</label>' + Ui.icon('search', 'w-4 h-4') +
+          '<input id="global-search" name="q" type="search" class="input" placeholder="Search…" autocomplete="off"></form>' +
+        '<a href="' + ROOT + 'pages/search.html" class="hidden rounded-full p-2 text-ink hover:bg-brand-50 sm:inline-flex xl:hidden" aria-label="Search">' + Ui.icon('search', 'w-5 h-5') + '</a>' +
         '<button type="button" id="notif-bell" class="relative rounded-full p-2 text-ink hover:bg-brand-50" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false">' +
           Ui.icon('bell', 'w-5 h-5') +
           '<span id="notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[1.15rem] rounded-full bg-coral-text px-1 text-center text-[11px] font-bold leading-[1.15rem] text-white" aria-hidden="true">0</span>' +
@@ -144,6 +149,12 @@
             '<a data-role="user" href="' + ROOT + 'pages/my-registrations.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">My registrations</a>' +
             '<a data-role="user" href="' + ROOT + 'pages/my-feedback.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">My feedback</a>' +
             '<a href="' + ROOT + 'pages/notifications.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">All notifications</a>' +
+            // ROLE GUARD (UX only): admin shortcuts, removed from the DOM for normal users by GUARD 3.
+            '<div data-role="admin" class="my-1 border-t border-line pt-1">' +
+              '<a href="' + ROOT + 'admin/dashboard.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">Admin dashboard</a>' +
+              '<a href="' + ROOT + 'admin/users.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">Manage users</a>' +
+              '<a href="' + ROOT + 'admin/notifications.html" class="block rounded-md px-3 py-2 text-sm hover:bg-brand-50">Manage notifications</a>' +
+            '</div>' +
             '<div class="my-1 border-t border-line"></div>' +
             '<button type="button" id="logout-btn" class="block w-full rounded-md px-3 py-2 text-left text-sm text-red-800 hover:bg-red-50">Log out</button>' +
           '</div>' +
@@ -230,10 +241,21 @@
         '</div>' +
       '</aside>' +
       '<div id="admin-scrim" class="admin-scrim" hidden></div>' +
-      // Small screens only: a slim bar with the menu button (the sidebar is always visible on desktop).
-      '<header class="admin-topbar lg:hidden">' +
-        '<button type="button" id="admin-menu-toggle" class="rounded-md p-2 text-ink hover:bg-brand-50" aria-label="Open admin menu" aria-expanded="false" aria-controls="admin-sidebar">' + Ui.icon('menu', 'w-5 h-5') + '</button>' +
-        '<span class="ml-2 font-semibold">CivicEvents admin</span>' +
+      // Top bar on every screen size: menu button (small screens), search, "View site" and the
+      // notification bell (same drawer and unread badge as the public header).
+      '<header class="admin-topbar">' +
+        '<button type="button" id="admin-menu-toggle" class="rounded-md p-2 text-ink hover:bg-brand-50 lg:hidden" aria-label="Open admin menu" aria-expanded="false" aria-controls="admin-sidebar">' + Ui.icon('menu', 'w-5 h-5') + '</button>' +
+        '<span class="ml-2 font-semibold lg:hidden">CivicEvents admin</span>' +
+        '<div class="admin-topbar-actions">' +
+          '<form role="search" action="' + ROOT + 'pages/search.html" method="get" class="header-search hidden md:flex">' +
+            '<label for="global-search" class="sr-only">Search events, announcements and promos</label>' + Ui.icon('search', 'w-4 h-4') +
+            '<input id="global-search" name="q" type="search" class="input" placeholder="Search…" autocomplete="off"></form>' +
+          '<a class="btn btn-ghost btn-sm hidden sm:inline-flex" href="' + ROOT + 'index.html">View site</a>' +
+          '<button type="button" id="notif-bell" class="relative rounded-full p-2 text-ink hover:bg-brand-50" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false">' +
+            Ui.icon('bell', 'w-5 h-5') +
+            '<span id="notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[1.15rem] rounded-full bg-coral-text px-1 text-center text-[11px] font-bold leading-[1.15rem] text-white" aria-hidden="true">0</span>' +
+          '</button>' +
+        '</div>' +
       '</header>';
     $('body').addClass('admin-app');
     $('#app-header').html(html);
@@ -357,6 +379,19 @@
     if (!$('#app-footer').length) $('body').append('<div id="app-footer"></div>');
   }
 
+  /**
+   * The backend accepts tokens of disabled accounts until they expire, so every signed-in page
+   * re-checks is_active (cached for a minute to avoid a request per click). A disabled account
+   * is signed out with an explanation. Network failures are ignored: the page keeps working.
+   */
+  function verifyActive() {
+    Api.get('/users/profile/me', null, { cache: 60000, silent: true }).done(function (r) {
+      if (r && r.data && r.data.is_active === false) {
+        Auth.logout('This account has been disabled. Please contact an administrator.', 'error');
+      }
+    });
+  }
+
   /* ---------- Public entry point ---------- */
   Layout.init = function (opts) {
     opts = opts || {};
@@ -378,7 +413,7 @@
       renderFooter();
       Auth.applyRoleVisibility($('#app-header'));
       bindHeader();
-      if (signedIn) Notifications.init();
+      if (signedIn) { Notifications.init(); verifyActive(); }
       return true;
     }
 
@@ -391,6 +426,7 @@
       renderAdminShell(String($('body').data('page') || opts.active));
       bindAdminShell();
       Notifications.init();
+      verifyActive();
       return true;
     }
     renderHeader(opts.active, true, false);
@@ -400,6 +436,7 @@
     Auth.applyRoleVisibility($('#app-header'));
     bindHeader();
     Notifications.init();
+    verifyActive();
 
     // GUARD 2 — admin-only pages show the "no access" screen to normal users
     if (access === 'admin' && !Auth.requireAdmin()) return false;

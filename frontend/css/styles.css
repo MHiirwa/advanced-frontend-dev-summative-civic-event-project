@@ -217,7 +217,10 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 
 .toolbar { display: flex; gap: .75rem; margin: 0 0 1.25rem; }
 .toolbar .input:first-child { flex: 1; }
-.card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+/* Mobile-first: one column, then 2 (≥641px) and 3 (≥961px). */
+.card-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@media (min-width: 641px) { .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 961px) { .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .stack-list { display: grid; gap: .75rem; }
 .list-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 1.25rem; }
 .list-row h2, .list-row h3 { margin: .15rem 0; font-size: 1rem; font-weight: 600; color: var(--ink); }
@@ -275,7 +278,6 @@ tr:last-child td { border-bottom: 0; }
 .detail-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); gap: 1.25rem; }
 
 @media (max-width: 960px) {
-  .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .admin-links { grid-template-columns: repeat(2, 1fr); }
 }
@@ -283,7 +285,7 @@ tr:last-child td { border-bottom: 0; }
   .container { width: calc(100% - 2rem); }
   .page-content { padding-top: 1.25rem; }
   .list-row { align-items: flex-start; flex-direction: column; }
-  .card-grid, .admin-links, .dashboard-columns, .detail-layout { grid-template-columns: 1fr; }
+  .admin-links, .dashboard-columns, .detail-layout { grid-template-columns: 1fr; }
   .two-col, .toolbar { grid-template-columns: 1fr; flex-direction: column; }
 }
 
@@ -542,7 +544,9 @@ tr:last-child td { border-bottom: 0; }
 }
 
 /* Admin building blocks */
-.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+.kpi-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@media (min-width: 481px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 961px) { .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .kpi { display: flex; align-items: center; gap: 1rem; padding: 1.15rem 1.25rem; }
 .kpi-icon { display: grid; place-items: center; width: 3rem; height: 3rem; flex-shrink: 0; border-radius: var(--radius); }
 .kpi-value { display: block; font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -569,8 +573,7 @@ tr:last-child td { border-bottom: 0; }
 .detail-list { display: grid; grid-template-columns: 9rem 1fr; gap: .6rem 1rem; margin: 0; font-size: .925rem; }
 .detail-list dt { color: var(--muted); }
 .detail-list dd { margin: 0; color: var(--ink); }
-@media (max-width: 960px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 480px) { .kpi-grid { grid-template-columns: 1fr; } .detail-list { grid-template-columns: 1fr; gap: .15rem; } .detail-list dd { margin-bottom: .5rem; } }
+@media (max-width: 480px) { .detail-list { grid-template-columns: 1fr; gap: .15rem; } .detail-list dd { margin-bottom: .5rem; } }
 
 /* =========================================================
    Auth pages (login / sign up): centred card on a light canvas
@@ -653,7 +656,8 @@ tr:last-child td { border-bottom: 0; }
 .attn-row + .attn-row { border-top: 1px solid var(--line); }
 .attn-count { display: grid; place-items: center; min-width: 2.5rem; height: 2.5rem; padding: 0 .4rem; border-radius: var(--radius-sm); background: var(--subtle); font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 .attn-label { flex: 1; font-size: .925rem; color: var(--ink); }
-@media (min-width: 1024px) { .admin-topbar { display: none; } }
+/* The admin top bar stays visible on desktop too: it holds the notification bell and "View site". */
+.admin-topbar-actions { display: flex; align-items: center; gap: .25rem; margin-left: auto; }
 /* The (usually hidden) form alert is the first child of the auth forms: no extra gap above the first field. */
 .auth-card form > #form-alert.hidden + * { margin-top: 0; }
 
@@ -707,3 +711,23 @@ tr:last-child td { border-bottom: 0; }
 .explore-browse { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .2rem 1rem; padding-left: 1.5rem; }
 .explore-browse-title { margin: 0; width: 100%; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
 .explore-browse a { padding: .1rem 0; font-size: .875rem; }
+
+/* ---------- Additions: rubric polish ---------- */
+/* Event card short description + explicit View link */
+.ev-desc { margin: .35rem 0 0; color: var(--muted); font-size: .875rem; }
+.ev-view { font-size: .875rem; font-weight: 600; }
+/* Image that failed to load: the card falls back to its date panel */
+.ev-media.img-failed { aspect-ratio: 5 / 2; }
+/* Header search box (desktop) */
+.header-search { position: relative; display: flex; align-items: center; }
+.header-search svg { position: absolute; left: .65rem; color: var(--muted); pointer-events: none; }
+.header-search input { width: 11rem; min-height: 2.25rem; padding: .35rem .75rem .35rem 2.1rem; font-size: .875rem; border-radius: 999px; transition: width .2s ease; }
+.header-search input:focus { width: 15rem; }
+@media (prefers-reduced-motion: reduce) { .header-search input { transition: none; } }
+/* Mobile-first collapsible filters (events list) */
+.filters-toggle { display: inline-flex; }
+.filters-body[hidden] { display: none; }
+.filters-body { margin-top: .75rem; }
+@media (min-width: 641px) { .filters-toggle { display: none; } .filters-body, .filters-body[hidden] { display: block; margin-top: 0; } }
+/* Tab panels (my registrations) */
+.seg-group:focus-within { box-shadow: none; }
