@@ -118,7 +118,7 @@
     var fields = text('title', 'Title', true);
     if (type === 'events') fields += text('description', 'Description', false, 'textarea') + text('location', 'Location', true) +
       '<div class="two-col">' + text('starts_at', 'Starts at', true, 'datetime-local') + text('ends_at', 'Ends at', true, 'datetime-local') + '</div>';
-    if (type === 'promos') fields += text('description', 'Description', true, 'textarea') + text('caption_text', 'Caption text (shown as English captions and a transcript)', true, 'textarea');
+    if (type === 'promos') fields += text('description', 'Description', true, 'textarea') + text('caption_text', 'Captions (English)', true, 'textarea');
 
     var fileLabel = { image: 'Event image', audio: 'Audio file', video: 'Video file' }[CFG.kind];
     var fileHint = 'Allowed: ' + rule.exts.join(', ') + '. Maximum ' + rule.maxMB + ' MB.' + (isEdit ? ' Leave empty to keep the current file.' : '');
@@ -139,6 +139,19 @@
       '<div class="flex flex-wrap gap-3"><button class="btn btn-primary" type="submit"' + (isEdit ? ' disabled' : '') + '>' + (isEdit ? 'Save changes' : 'Create ' + CFG.label) + '</button><a class="btn btn-ghost" href="' + type + '.html">Cancel</a></div>' +
     '</form></div>');
     var $form = $('#content-form'), $submit = $form.find('[type=submit]');
+
+    /* ---------- Promo captions: plain text or timed subtitles (see C.captionsUrl) ---------- */
+    if (type === 'promos') {
+      $('#f-caption_text').attr({ rows: 8, 'aria-describedby': 'f-caption_text-hint', spellcheck: 'true' })
+        .after('<p id="f-caption_text-hint" class="mt-1 text-sm text-muted">Type what is said in the video, and the captions are timed across it automatically. ' +
+          'For exact timing, paste subtitles in SRT or WebVTT format instead (lines like <code>00:00:01,000 --&gt; 00:00:04,000</code>), for example exported from YouTube Studio or a free subtitle tool.</p>' +
+          '<p id="f-caption_text-mode" class="mt-1 text-sm font-semibold text-brand-800" aria-live="polite"></p>');
+      // Live feedback on which mode the text will use.
+      $form.on('input', '#f-caption_text', Ui.debounce(function () {
+        var v = $('#f-caption_text').val().trim(), timed = C.isTimedCaptions(v), n = timed ? C.parseTimedCaptions(v).length : 0;
+        $('#f-caption_text-mode').text(!v ? '' : timed ? (n ? 'Timed subtitles detected: ' + n + ' caption' + (n === 1 ? '' : 's') + '.' : 'This looks like subtitles, but no caption could be read. Check the timing lines.') : 'Plain text: captions will be timed automatically.');
+      }, 250));
+    }
 
     /* ---------- Dates: datetime-local <-> ISO (keep the admin's local time zone) ---------- */
     function toLocalInput(v) {
@@ -211,6 +224,9 @@
       var $file = $('#f-file'), file = $file.length ? $file[0].files[0] : null;
       $form.find('[required]').not('[type=file]').each(function () { if (!$(this).val().trim()) Ui.setFieldError($(this), 'This field is required.'); });
       if (type === 'events') checkDates();
+      // Pasted subtitles that can't be read would silently show nothing on the video: stop here instead.
+      var cap = $('#f-caption_text').length ? $('#f-caption_text').val().trim() : '';
+      if (cap && C.isTimedCaptions(cap) && !C.parseTimedCaptions(cap).length) Ui.setFieldError($('#f-caption_text'), 'These subtitles could not be read. Each caption needs a line like 00:00:01,000 --> 00:00:04,000 followed by its text.');
       if ($file.length && !isEdit && !file) Ui.setFieldError($file, 'Please choose a file to upload.');
       if (file) { var ferr = Ui.validateFile(file, CFG.kind); if (ferr) Ui.setFieldError($file, ferr); }
       var $bad = $form.find('[aria-invalid="true"]').first();
