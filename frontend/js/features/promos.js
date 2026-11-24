@@ -27,12 +27,15 @@
     }, 'Promos', 'Short videos with English captions.', 'promos');
   }
   /* Promo detail: native video controls (play/pause, volume, fullscreen) + English captions
-   * from caption_text via a WebVTT Blob URL, and the same text as a transcript. */
-  var captionBlobUrl = null;
+   * from caption_text via a WebVTT Blob URL (see C.captionsUrl), and the same words as a transcript.
+   * Timed subtitles (SRT/VTT) keep their timings. Plain text starts as one cue and, once the video's
+   * duration is known, is replaced by timed caption lines spread across the video. */
+  var captionBlobUrl = null, captionText = '';
   function promoDetail() {
     mediaDetail('promos', 'Promo', function (p, isAdmin, H2) {
       if (captionBlobUrl) URL.revokeObjectURL(captionBlobUrl);
-      captionBlobUrl = C.captionsUrl(p.caption_text);
+      captionText = p.caption_text || '';
+      captionBlobUrl = C.captionsUrl(captionText);
       var url = Ui.escape(p.video_url || '');
       return '<article class="card overflow-hidden">' +
         // preload="metadata": only the header (size/duration/first frame) loads until the user presses play.
@@ -47,14 +50,33 @@
           '<h2 class="' + H2 + '">About this promo</h2>' +
           '<p class="mt-2 whitespace-pre-line leading-relaxed">' + Ui.escape(p.description || 'No description provided.') + '</p>' +
           '<section class="mt-6 border-t border-brand-100 pt-5" aria-labelledby="promo-transcript-title"><h2 id="promo-transcript-title" class="' + H2 + '">Transcript</h2>' +
-            '<p class="mt-2 whitespace-pre-line leading-relaxed">' + Ui.escape(p.caption_text || 'No captions or transcript were provided for this promo.') + '</p></section>' +
+            '<p class="mt-2 whitespace-pre-line leading-relaxed">' + Ui.escape(C.captionTranscript(p.caption_text) || 'No captions or transcript were provided for this promo.') + '</p></section>' +
         '</div>' +
       '</article>';
     });
     // Make sure captions are visible even if a browser ignores `default`; show an error if the file can't play.
-    document.addEventListener('loadedmetadata', function (e) {
-      if (e.target.id === 'promo-video' && e.target.textTracks[0]) e.target.textTracks[0].mode = 'showing';
-    }, true);
+    // loadedmetadata normally carries the duration; some files (e.g. browser-recorded WebM/MKV) only
+    // report it later through durationchange, so both events can trigger the one-time swap.
+    function onMedia(e) {
+      var video = e.target;
+      if (video.id !== 'promo-video') return;
+      // Plain-text captions: now that the duration is known, swap in a track with timed lines (once).
+      if (captionText && !video.dataset.timedCaptions && !C.isTimedCaptions(captionText) && isFinite(video.duration) && video.duration > 0) {
+        video.dataset.timedCaptions = '1';
+        var timedUrl = C.captionsUrl(captionText, video.duration), old = video.querySelector('track');
+        if (timedUrl && old) {
+          var track = document.createElement('track');
+          track.kind = 'captions'; track.srclang = 'en'; track.label = 'English'; track.src = timedUrl; track.default = true;
+          old.replaceWith(track);
+          if (captionBlobUrl) URL.revokeObjectURL(captionBlobUrl);
+          captionBlobUrl = timedUrl;
+        }
+      }
+      // Captions on by default, even if a browser ignores `default`.
+      Array.prototype.forEach.call(video.textTracks, function (t, i) { t.mode = i === video.textTracks.length - 1 ? 'showing' : 'disabled'; });
+    }
+    document.addEventListener('loadedmetadata', onMedia, true);
+    document.addEventListener('durationchange', onMedia, true);
     document.addEventListener('error', function (e) {
       if (e.target.id === 'promo-video') $('#promo-video-error').removeClass('hidden');
     }, true);

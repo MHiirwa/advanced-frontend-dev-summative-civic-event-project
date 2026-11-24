@@ -258,16 +258,81 @@
   }).on('change', '.ap-seek', function () { $(this).data('dragging', false); });
 
   /* ---------- Captions: WebVTT built from promo.caption_text ----------
-   * The API stores captions as plain text, but <track> needs a WebVTT file. We build one cue
-   * spanning the whole video and serve it from a Blob URL (same origin, so no CORS issue). */
-  C.captionsUrl = function (text) {
+   * The API stores captions as one text field, but <track> needs a WebVTT file, which we build
+   * and serve from a Blob URL (same origin, so no CORS issue). caption_text can be either:
+   *  1. Timed subtitles (SRT or WebVTT pasted by the admin, e.g. exported from a subtitle tool):
+   *     the exact timings are kept.
+   *  2. Plain text: split into short caption lines (sentences, max ~12 words) and spread across
+   *     the video's duration, weighted by word count, so captions follow the speech roughly.
+   *     Until the duration is known, the whole text is shown as one cue (C.captionsUrl(text)). */
+  var TIME_RE = /(\d{1,2}:)?(\d{1,2}):(\d{2})[.,](\d{1,3})/;
+  function escCue(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function toSeconds(m) { return (m[1] ? parseInt(m[1], 10) * 3600 : 0) + parseInt(m[2], 10) * 60 + parseInt(m[3], 10) + parseInt((m[4] + '00').slice(0, 3), 10) / 1000; }
+  function vttTime(sec) {
+    sec = Math.max(0, sec);
+    var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60, p = function (n, w) { return String(n).padStart(w, '0'); };
+    return p(h, 2) + ':' + p(m, 2) + ':' + p(Math.floor(s), 2) + '.' + p(Math.round((s % 1) * 1000) % 1000, 3);
+  }
+  function blobUrl(cues) {
+    var vtt = 'WEBVTT\n\n' + cues.map(function (c) { return vttTime(c.start) + ' --> ' + vttTime(c.end) + '\n' + escCue(c.text); }).join('\n\n') + '\n';
+    return URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+  }
+
+  /** True when the text is SRT/WebVTT (has at least one "start --> end" timing line). */
+  C.isTimedCaptions = function (text) { return /\d{1,2}:\d{2}[.,]\d{1,3}\s*-->\s*(\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{1,3}/.test(String(text || '')); };
+
+  /** Parse SRT or WebVTT into [{ start, end, text }]. Sequence numbers, headers and NOTE blocks are ignored. */
+  C.parseTimedCaptions = function (text) {
+    var cues = [];
+    String(text || '').replace(/\r/g, '').split(/\n\s*\n/).forEach(function (block) {
+      var lines = block.split('\n'), i = 0;
+      while (i < lines.length && lines[i].indexOf('-->') === -1) i++;
+      if (i === lines.length) return; // WEBVTT header, NOTE, STYLE or junk
+      var parts = lines[i].split('-->'), a = TIME_RE.exec(parts[0]), b = TIME_RE.exec(parts[1] || '');
+      var body = lines.slice(i + 1).join('\n').replace(/<[^>]+>/g, '').trim(); // drop <i>, <b>, voice tags
+      if (a && b && body) cues.push({ start: toSeconds(a), end: toSeconds(b), text: body });
+    });
+    return cues.filter(function (c) { return c.end > c.start; }).sort(function (x, y) { return x.start - y.start; });
+  };
+
+  /** Plain words for the transcript: timed captions lose their numbers and timings. */
+  C.captionTranscript = function (text) {
+    return C.isTimedCaptions(text) ? C.parseTimedCaptions(text).map(function (c) { return c.text.replace(/\n/g, ' '); }).join('\n') : String(text || '').trim();
+  };
+
+  /** Split plain text into caption-sized lines: sentences, long ones cut at ~12 words. */
+  function captionLines(text) {
+    var out = [];
+    String(text).replace(/\r/g, '').split(/\n+|(?<=[.!?…])\s+/).forEach(function (sentence) {
+      var words = sentence.trim().split(/\s+/).filter(Boolean);
+      for (var i = 0; i < words.length; i += 12) {
+        var chunk = words.slice(i, i + 12);
+        if (words.length - (i + 12) > 0 && words.length - (i + 12) < 4) { chunk = words.slice(i); i = words.length; } // no 1–3 word leftovers
+        out.push(chunk.join(' '));
+      }
+    });
+    return out.filter(Boolean);
+  }
+
+  /**
+   * Blob URL of a WebVTT file for caption_text, or null when there is no text.
+   * `duration` (seconds) lets plain text be timed across the video; without it plain text is one cue.
+   */
+  C.captionsUrl = function (text, duration) {
     text = String(text || '').trim();
     if (!text) return null;
-    var cue = text.replace(/-->/g, '→')  // "-->" is reserved in WebVTT (replace before escaping ">")
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/\r/g, '').replace(/\n\s*\n+/g, '\n'); // a blank line would end the cue early
-    var vtt = 'WEBVTT\n\n00:00:00.000 --> 99:59:59.000\n' + cue + '\n';
-    return URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+    if (C.isTimedCaptions(text)) {
+      var timed = C.parseTimedCaptions(text);
+      if (timed.length) return blobUrl(timed);
+    }
+    var lines = captionLines(text);
+    if (!(duration > 0) || !isFinite(duration) || lines.length < 2) return blobUrl([{ start: 0, end: 359999, text: lines.join('\n') || text }]);
+    // Weight each line by its word count (+1 so short lines still get time), leave a small gap between cues.
+    var weights = lines.map(function (l) { return l.split(/\s+/).length + 1; }), total = weights.reduce(function (s, w) { return s + w; }, 0), t = 0;
+    return blobUrl(lines.map(function (l, i) {
+      var len = duration * weights[i] / total, cue = { start: t, end: Math.max(t + 0.5, t + len - 0.05), text: l };
+      t += len; return cue;
+    }));
   };
   /**
    * Promo card. The thumbnail is the video's first frame: the <video> only gets its src (with a
