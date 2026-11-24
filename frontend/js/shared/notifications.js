@@ -88,11 +88,11 @@
     $('body').append(
       '<div id="notif-overlay" class="drawer-overlay" aria-hidden="true"></div>' +
       '<aside id="notif-drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="notif-title" aria-hidden="true">' +
-        '<div class="flex items-center justify-between gap-3 border-b border-brand-100 px-5 py-4">' +
-          '<h2 id="notif-title" class="font-display text-xl font-semibold">Notifications</h2>' +
+        '<div class="flex items-center justify-between gap-3 border-b border-line px-6 py-4">' +
+          '<h2 id="notif-title" class="t-card-title">Notifications</h2>' +
           '<button type="button" id="notif-close" class="btn btn-ghost btn-sm" aria-label="Close notifications">' + Ui.icon('x', 'w-5 h-5') + '</button>' +
         '</div>' +
-        '<div id="notif-toolbar" class="flex items-center justify-between border-b border-brand-100 px-5 py-2 text-sm">' +
+        '<div id="notif-toolbar" class="flex items-center justify-between bg-subtle px-6 py-2 text-sm">' +
           '<button type="button" id="notif-mark-all" class="btn btn-ghost btn-sm">Mark all as read</button>' +
           '<a href="' + ((window.Layout && Layout.root) || '') + 'pages/notifications.html" class="btn btn-ghost btn-sm">View all</a>' +
         '</div>' +
@@ -175,10 +175,10 @@
         '<div class="p-5">' +
           '<button type="button" class="btn btn-ghost btn-sm -ml-2 mb-4" data-back>' + Ui.icon('back', 'w-4 h-4') + ' Back to list</button>' +
           '<span class="badge ' + Notifications.badgeClass(n.type) + '">' + Ui.escape(n.type) + '</span>' +
-          '<h3 id="notif-detail-title" tabindex="-1" class="mt-3 font-display text-2xl font-semibold">' + Ui.escape(n.title) + '</h3>' +
+          '<h3 id="notif-detail-title" tabindex="-1" class="mt-3 t-card-title">' + Ui.escape(n.title) + '</h3>' +
           '<p class="mt-1 text-sm text-muted"><time datetime="' + Ui.escape(n.created_at) + '">' + Ui.escape(Ui.formatDateTime(n.created_at)) + '</time></p>' +
           '<p class="mt-5 whitespace-pre-line leading-relaxed">' + Ui.escape(n.message) + '</p>' +
-          (link ? '<a class="btn btn-primary mt-6" href="' + link.href + '">' + Ui.escape(link.label) + ' ' + Ui.icon('external', 'w-4 h-4') + '</a>' : '') +
+          (link ? '<a class="btn btn-primary mt-6" href="' + link.href + '">' + Ui.escape(link.label) + Ui.icon('arrowRight', 'w-4 h-4') + '</a>' : '') +
         '</div>'
       );
       if (moveFocus) $('#notif-detail-title').trigger('focus');
@@ -192,7 +192,7 @@
     }
 
     var set = readSet();
-    var html = '<ul class="divide-y divide-brand-100">';
+    var html = '<ul class="divide-y divide-line">';
     items.forEach(function (n) {
       var unread = set.indexOf(String(n.id)) === -1;
       html +=

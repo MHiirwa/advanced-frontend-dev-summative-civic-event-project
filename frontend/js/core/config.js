@@ -10,7 +10,7 @@ window.CONFIG = {
   API_PREFIX: '/api',
 
   // Shown on the footer and on the "forbidden" screen
-  SUPPORT_EMAIL: 'support@civicevents.example',
+  SUPPORT_EMAIL: 'm.hirwa1@alustudent.com',
 
   // How often the notification bell checks for new items (ms)
   NOTIFICATION_POLL_MS: 60000,

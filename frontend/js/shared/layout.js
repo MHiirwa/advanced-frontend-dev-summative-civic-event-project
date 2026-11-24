@@ -129,7 +129,7 @@
         '<a href="' + ROOT + 'pages/search.html" class="hidden rounded-full p-2 text-ink hover:bg-brand-50 sm:inline-flex xl:hidden" aria-label="Search">' + Ui.icon('search', 'w-5 h-5') + '</a>' +
         '<button type="button" id="notif-bell" class="relative rounded-full p-2 text-ink hover:bg-brand-50" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false">' +
           Ui.icon('bell', 'w-5 h-5') +
-          '<span id="notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[1.15rem] rounded-full bg-coral-text px-1 text-center text-[11px] font-bold leading-[1.15rem] text-white" aria-hidden="true">0</span>' +
+          '<span id="notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[1.15rem] rounded-full bg-coral-text px-1 text-center text-xs font-bold leading-[1.15rem] text-white" aria-hidden="true">0</span>' +
         '</button>' +
         '<div class="relative" data-dropdown>' +
           '<button type="button" class="flex items-center gap-2 rounded-full p-1 pr-2 hover:bg-brand-50" aria-expanded="false" aria-controls="profile-menu" data-dropdown-toggle>' +
@@ -241,7 +241,7 @@
         '</div>' +
       '</aside>' +
       '<div id="admin-scrim" class="admin-scrim" hidden></div>' +
-      // Top bar on every screen size: menu button (small screens), search, "View site" and the
+      // Top bar on every screen size: menu button (small screens), search and the
       // notification bell (same drawer and unread badge as the public header).
       '<header class="admin-topbar">' +
         '<button type="button" id="admin-menu-toggle" class="rounded-md p-2 text-ink hover:bg-brand-50 lg:hidden" aria-label="Open admin menu" aria-expanded="false" aria-controls="admin-sidebar">' + Ui.icon('menu', 'w-5 h-5') + '</button>' +
@@ -250,10 +250,9 @@
           '<form role="search" action="' + ROOT + 'pages/search.html" method="get" class="header-search hidden md:flex">' +
             '<label for="global-search" class="sr-only">Search events, announcements and promos</label>' + Ui.icon('search', 'w-4 h-4') +
             '<input id="global-search" name="q" type="search" class="input" placeholder="Search…" autocomplete="off"></form>' +
-          '<a class="btn btn-ghost btn-sm hidden sm:inline-flex" href="' + ROOT + 'index.html">View site</a>' +
           '<button type="button" id="notif-bell" class="relative rounded-full p-2 text-ink hover:bg-brand-50" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false">' +
             Ui.icon('bell', 'w-5 h-5') +
-            '<span id="notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[1.15rem] rounded-full bg-coral-text px-1 text-center text-[11px] font-bold leading-[1.15rem] text-white" aria-hidden="true">0</span>' +
+            '<span id="notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[1.15rem] rounded-full bg-coral-text px-1 text-center text-xs font-bold leading-[1.15rem] text-white" aria-hidden="true">0</span>' +
           '</button>' +
         '</div>' +
       '</header>';
@@ -279,9 +278,9 @@
   function renderFooter() {
     var year = new Date().getFullYear();
     var links = communities().map(function (c) { return [ROOT + c.href, c.title]; })
-      .concat([[ROOT + 'pages/announcements.html', 'Announcements'], [ROOT + 'pages/promos.html', 'Promos'], ['mailto:' + CONFIG.SUPPORT_EMAIL, CONFIG.SUPPORT_EMAIL]]);
+      .concat([[ROOT + 'pages/announcements.html', 'Announcements'], [ROOT + 'pages/promos.html', 'Promos'], ['mailto:' + CONFIG.SUPPORT_EMAIL, 'Help & contact: ' + CONFIG.SUPPORT_EMAIL]]);
     $('#app-footer').html(
-      '<footer class="site-footer mt-16 border-t border-line bg-[#F8FAFC]">' +
+      '<footer class="site-footer mt-12 border-t border-line bg-white">' +
         '<div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-muted md:flex-row md:items-center md:justify-between">' +
           '<p>© ' + year + ' CivicEvents · Civic, campus and community events in Rwanda</p>' +
           '<nav aria-label="Footer"><ul class="flex flex-wrap gap-x-5 gap-y-2">' +

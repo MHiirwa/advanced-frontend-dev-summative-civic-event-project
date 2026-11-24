@@ -23,12 +23,13 @@ $(function () {
     special: { label: 'A special character (e.g. ! @ # $)', test: function (p) { return /[\W_]/.test(p); } }
   };
   var LEVELS = [
-    { text: 'enter a password', color: '#E2E1DA', cls: 'text-muted' },
-    { text: 'very weak', color: '#b42318', cls: 'text-red-700' },
-    { text: 'weak', color: '#b42318', cls: 'text-red-700' },
-    { text: 'fair', color: '#b45309', cls: 'text-amber-700' },
-    { text: 'good', color: '#4d7c0f', cls: 'text-lime-800' },
-    { text: 'strong', color: '#15803d', cls: 'text-green-700' }
+    // Semantic palette only: danger red, warning amber (#B7791F = 3:1 UI colour), success green.
+    { text: 'enter a password', color: '#E3E7EC', cls: 'text-muted' },
+    { text: 'very weak', color: '#B42318', cls: 'text-red-700' },
+    { text: 'weak', color: '#B42318', cls: 'text-red-700' },
+    { text: 'fair', color: '#B7791F', cls: 'text-amber-700' },
+    { text: 'good', color: '#1E7A46', cls: 'text-green-700' },
+    { text: 'strong', color: '#1E7A46', cls: 'text-green-700' }
   ];
 
   var $form = $('#signup-form');
@@ -49,7 +50,7 @@ $(function () {
     var level = LEVELS[score];
 
     $('#strength-bar .strength-seg').each(function (i) {
-      $(this).css('background-color', i < score ? level.color : '#E2E1DA');
+      $(this).css('background-color', i < score ? level.color : '#E3E7EC');
     });
     $('#strength-text').text(level.text).attr('class', 'font-semibold ' + level.cls);
 

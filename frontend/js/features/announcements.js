@@ -35,7 +35,7 @@
         '<p class="text-sm text-muted">Published <time datetime="' + Ui.escape(a.created_at) + '">' + Ui.escape(Ui.formatDateTime(a.created_at)) + '</time> · Length <span class="ap-length">…</span></p>' +
         '<h2 id="ann-player-title" class="mt-4 ' + H2 + '">Listen</h2>' +
         C.audioPlayer(a.audio_url, a.title) +
-        '<section class="mt-6 border-t border-brand-100 pt-5" aria-labelledby="ann-transcript-title"><h2 id="ann-transcript-title" class="' + H2 + '">Transcript</h2>' +
+        '<section class="mt-6 border-t border-line pt-6" aria-labelledby="ann-transcript-title"><h2 id="ann-transcript-title" class="' + H2 + '">Transcript</h2>' +
           '<p class="mt-2 text-muted">A written transcript has not been provided for this audio announcement. If you need this information in another format, contact <a class="underline" href="mailto:' + Ui.escape(CONFIG.SUPPORT_EMAIL) + '">' + Ui.escape(CONFIG.SUPPORT_EMAIL) + '</a>.</p></section>' +
       '</article>';
     });

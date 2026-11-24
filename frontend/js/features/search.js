@@ -28,7 +28,7 @@
         var groups = [['Events', (ev.data || []).filter(match), C.eventCard], ['Announcements', (an.data || []).filter(match), C.announcementCard], ['Promos', (pr.data || []).filter(match), C.promoCard]];
         var total = groups.reduce(function (n, g) { return n + g[1].length; }, 0);
         $results.html(total ? groups.filter(function (g) { return g[1].length; }).map(function (g) {
-          return '<section class="mt-6" aria-label="' + g[0] + ' results"><h2 class="font-display text-2xl font-semibold">' + g[0] + ' <span class="muted">(' + g[1].length + ')</span></h2><div class="card-grid mt-4">' + g[1].map(function (x) { return g[2](x, false); }).join('') + '</div></section>';
+          return '<section class="mt-6" aria-label="' + g[0] + ' results"><h2 class="t-section">' + g[0] + ' <span class="font-normal text-muted">(' + g[1].length + ')</span></h2><div class="card-grid mt-4">' + g[1].map(function (x) { return g[2](x, false); }).join('') + '</div></section>';
         }).join('') : C.empty('No results', 'Nothing matched “' + q + '”. Try another word.'));
       }).fail(fail);
   }

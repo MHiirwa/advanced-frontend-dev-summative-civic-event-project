@@ -5,7 +5,7 @@
   C.loading = function () { return '<div class="loading-panel" role="status"><span class="spinner" aria-hidden="true"></span><span>Loading…</span></div>'; };
   /** Empty state. `icon` is an optional Ui.icon name (default: inbox). */
   C.empty = function (title, text, icon) { return '<div class="empty-panel"><div class="empty-icon">' + Ui.icon(icon || 'inbox', 'w-5 h-5') + '</div><h2>' + Ui.escape(title) + '</h2>' + (text ? '<p>' + Ui.escape(text) + '</p>' : '') + '</div>'; };
-  C.error = function (message) { return '<div class="error-panel" role="alert"><span class="text-red-700">' + Ui.icon('warning', 'w-6 h-6') + '</span><strong>Something went wrong</strong><p>' + Ui.escape(message) + '</p><button class="btn btn-secondary retry-btn" type="button">' + Ui.icon('refresh', 'w-4 h-4') + ' Try again</button></div>'; };
+  C.error = function (message) { return '<div class="error-panel" role="alert"><div class="error-icon">' + Ui.icon('alert', 'w-5 h-5') + '</div><strong>Something went wrong</strong><p>' + Ui.escape(message) + '</p><button class="btn btn-secondary retry-btn" type="button">' + Ui.icon('refresh', 'w-4 h-4') + ' Try again</button></div>'; };
   /** Published / draft pill (admin information). Icon + text, never colour alone. */
   C.status = function (published) { return '<span class="status ' + (published ? 'status-live' : 'status-draft') + '">' + Ui.icon(published ? 'circleCheck' : 'edit', '') + (published ? 'Published' : 'Draft') + '</span>'; };
 
@@ -46,7 +46,7 @@
   C.stars = function (n) {
     n = Math.max(0, Math.min(5, Number(n) || 0));
     var row = function (fill) { var h = ''; for (var i = 0; i < 5; i++) h += Ui.icon('star', 'w-4 h-4' + (fill ? ' fill-current' : '')); return h; };
-    return '<span class="stars relative inline-flex align-middle" aria-hidden="true"><span class="inline-flex text-[#C9C7BD]">' + row(false) + '</span>' +
+    return '<span class="stars relative inline-flex align-middle" aria-hidden="true"><span class="inline-flex text-line-strong">' + row(false) + '</span>' +
       '<span class="absolute inset-y-0 left-0 inline-flex overflow-hidden whitespace-nowrap" style="width:' + (n / 5 * 100) + '%">' + row(true) + '</span></span>' +
       '<span class="sr-only">' + (Math.round(n * 10) / 10) + ' out of 5 stars</span>';
   };
@@ -108,12 +108,16 @@
         (image ? '<img src="' + Ui.escape(image) + '" alt="" loading="lazy" data-fallback-date="' + Ui.escape(e.starts_at || '') + '">' : C.datePanel(d)) +
       '</a>' +
       '<div class="ev-body">' +
+        // Hierarchy: community (caption) > title (card title) > status chips > date and place (meta, with
+        // icons for quick scanning) > short description > actions (View neutral, Register = accent).
         (community ? '<p class="dc-kicker">' + Ui.escape(community) + '</p>' : '') +
         '<h3 class="dc-title"><a href="' + href + '">' + Ui.escape(e.title) + '</a></h3>' +
-        '<p class="text-sm text-muted">' + Ui.escape(when) + ' · ' + Ui.escape(e.location || 'Location to be announced') + '</p>' +
+        (chips ? '<div class="ev-chips">' + chips + '</div>' : '') +
+        '<p class="ev-meta"><span>' + Ui.icon('calendar') + Ui.escape(when) + '</span>' +
+          '<span>' + Ui.icon('pin') + '<span class="truncate">' + Ui.escape(e.location || 'Location to be announced') + '</span></span></p>' +
         (e.description ? '<p class="ev-desc clamp">' + Ui.escape(C.excerpt(e.description)) + '</p>' : '') +
-        '<div class="ev-foot">' + (chips ? '<span class="flex flex-wrap gap-1">' + chips + '</span>' : '') +
-          '<span class="ev-action flex items-center gap-4"><a class="ev-view text-link" href="' + href + '" aria-label="View details for ' + Ui.escape(e.title) + '">View</a>' + action + '</span></div>' +
+        '<div class="ev-foot">' +
+          '<span class="ev-action flex items-center gap-4"><a class="ev-view" href="' + href + '" aria-label="View details for ' + Ui.escape(e.title) + '">View</a>' + action + '</span></div>' +
       '</div>' +
       (admin ? '<div class="ec-admin">' + C.manageActions(e, 'events') + '</div>' : '') +
     '</article>';
@@ -195,7 +199,7 @@
   };
   C.audioPlayer = function (src, title) {
     var t = Ui.escape(title || 'announcement'), url = Ui.escape(src || '');
-    return '<div class="audio-player my-3 rounded-xl border border-brand-100 bg-brand-50 p-3" data-audio-player data-title="' + t + '">' +
+    return '<div class="audio-player my-3 rounded-xl bg-subtle p-4" data-audio-player data-title="' + t + '">' +
       '<audio preload="metadata" src="' + url + '">' +
         '<p>Your browser cannot play this audio. <a href="' + url + '" download>Download the audio file</a>.</p>' +
       '</audio>' +
@@ -345,8 +349,8 @@
         '<video data-lazy-src="' + Ui.escape((p.video_url || '') + '#t=0.5') + '" preload="none" muted playsinline aria-hidden="true" tabindex="-1"></video>' +
         '<span class="promo-play" aria-hidden="true">' + PLAY_SVG + '</span></a>' +
       '<div class="ev-body"><h3 class="dc-title"><a href="' + href + '">' + Ui.escape(p.title) + '</a></h3>' +
-        (p.description ? '<p class="clamp text-sm text-muted">' + Ui.escape(p.description) + '</p>' : '') +
-        '<p class="mt-1 text-xs text-muted">' + (p.caption_text ? 'English captions · ' : '') + Ui.escape(Ui.formatDate(p.created_at)) + '</p></div>' +
+        (p.description ? '<p class="ev-desc clamp">' + Ui.escape(p.description) + '</p>' : '') +
+        '<p class="ev-meta mt-auto"><span>' + Ui.icon('video') + (p.caption_text ? 'English captions' : 'No captions') + '</span></p></div>' +
     '</article>';
   };
   // Lazy first-frame loader for promo thumbnails (IntersectionObserver; falls back to loading at once).
@@ -364,7 +368,7 @@
     var iso = img.getAttribute('data-fallback-date'), d = iso ? new Date(iso) : null;
     var $wrap = $(img).parent();
     if ($wrap.hasClass('ev-media')) { $wrap.addClass('img-failed'); $(img).replaceWith(C.datePanel(d && !isNaN(d) ? d : null)); }
-    else $(img).replaceWith('<div class="flex h-48 items-center justify-center bg-brand-50 text-brand-700" role="img" aria-label="Image unavailable">' + Ui.icon('calendar', 'w-12 h-12') + '</div>');
+    else $(img).replaceWith('<div class="flex h-48 items-center justify-center bg-subtle text-muted" role="img" aria-label="Image unavailable">' + Ui.icon('calendar', 'w-12 h-12') + '</div>');
   }, true);
   document.addEventListener('error', function (e) { // video that can't load: keep the dark tile with the play icon
     if (e.target.tagName === 'VIDEO' && e.target.closest('.promo-thumb')) e.target.style.visibility = 'hidden';
@@ -401,12 +405,12 @@
     for (var i = 1; i <= pages; i++) if (i === 1 || i === pages || Math.abs(i - page) <= 1) nums.push(i);
     var btn = 'inline-flex h-10 min-w-[2.5rem] items-center justify-center rounded-lg border px-3 text-sm font-semibold';
     var html = '<ul class="flex flex-wrap items-center justify-center gap-2">' +
-      '<li><button type="button" class="' + btn + ' border-brand-100 bg-white hover:bg-brand-50 disabled:opacity-40" data-page="' + (page - 1) + '"' + (page === 1 ? ' disabled' : '') + ' aria-label="Previous page">' + Ui.icon('back', 'w-4 h-4') + '<span class="ml-1 hidden sm:inline">Previous</span></button></li>';
+      '<li><button type="button" class="' + btn + ' border-line bg-white hover:bg-subtle hover:border-line-strong disabled:opacity-40 disabled:cursor-not-allowed" data-page="' + (page - 1) + '"' + (page === 1 ? ' disabled' : '') + ' aria-label="Previous page">' + Ui.icon('back', 'w-4 h-4') + '<span class="ml-1 hidden sm:inline">Previous</span></button></li>';
     nums.forEach(function (n, idx) {
       if (idx && n - nums[idx - 1] > 1) html += '<li aria-hidden="true" class="px-1 text-muted">…</li>';
-      html += '<li><button type="button" class="' + btn + (n === page ? ' border-brand-700 bg-brand-700 text-white' : ' border-brand-100 bg-white hover:bg-brand-50') + '" data-page="' + n + '" aria-label="Page ' + n + '"' + (n === page ? ' aria-current="page"' : '') + '>' + n + '</button></li>';
+      html += '<li><button type="button" class="' + btn + (n === page ? ' border-brand-700 bg-brand-700 text-white' : ' border-line bg-white hover:bg-subtle hover:border-line-strong') + '" data-page="' + n + '" aria-label="Page ' + n + '"' + (n === page ? ' aria-current="page"' : '') + '>' + n + '</button></li>';
     });
-    html += '<li><button type="button" class="' + btn + ' border-brand-100 bg-white hover:bg-brand-50 disabled:opacity-40" data-page="' + (page + 1) + '"' + (page === pages ? ' disabled' : '') + ' aria-label="Next page"><span class="mr-1 hidden sm:inline">Next</span><span class="inline-block rotate-180">' + Ui.icon('back', 'w-4 h-4') + '</span></button></li>';
+    html += '<li><button type="button" class="' + btn + ' border-line bg-white hover:bg-subtle hover:border-line-strong disabled:opacity-40 disabled:cursor-not-allowed" data-page="' + (page + 1) + '"' + (page === pages ? ' disabled' : '') + ' aria-label="Next page"><span class="mr-1 hidden sm:inline">Next</span><span class="inline-block rotate-180">' + Ui.icon('back', 'w-4 h-4') + '</span></button></li>';
     return html + '</ul>';
   };
   C.table = function (headers, rows) { return '<div class="table-wrap"><table><thead><tr>' + headers.map(function (h) { return '<th>' + Ui.escape(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + rows + '</tbody></table></div>'; };

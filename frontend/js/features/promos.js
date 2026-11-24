@@ -49,7 +49,7 @@
           (isAdmin ? '<p class="mb-3">' + C.status(p.published) + '</p>' : '') +
           '<h2 class="' + H2 + '">About this promo</h2>' +
           '<p class="mt-2 whitespace-pre-line leading-relaxed">' + Ui.escape(p.description || 'No description provided.') + '</p>' +
-          '<section class="mt-6 border-t border-brand-100 pt-5" aria-labelledby="promo-transcript-title"><h2 id="promo-transcript-title" class="' + H2 + '">Transcript</h2>' +
+          '<section class="mt-6 border-t border-line pt-6" aria-labelledby="promo-transcript-title"><h2 id="promo-transcript-title" class="' + H2 + '">Transcript</h2>' +
             '<p class="mt-2 whitespace-pre-line leading-relaxed">' + Ui.escape(C.captionTranscript(p.caption_text) || 'No captions or transcript were provided for this promo.') + '</p></section>' +
         '</div>' +
       '</article>';

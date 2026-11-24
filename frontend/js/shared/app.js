@@ -67,7 +67,7 @@
         if (!x || (!isAdmin && x.published === false)) { showError({ message: 'This ' + label.toLowerCase() + ' does not exist or is not published.' }, false); return; }
         $('main h1').first().text(x.title);
         document.title = x.title + ' · CivicEvents';
-        put(back + '<div class="mx-auto mt-4 max-w-4xl">' + render(x, isAdmin, 'font-display text-xl font-semibold text-brand-900') + '</div>');
+        put(back + '<div class="mx-auto mt-4 max-w-4xl">' + render(x, isAdmin, 't-card-title') + '</div>');
       }).fail(function (err) { showError(err, true); });
     }
     load();

@@ -77,13 +77,13 @@
       $('#' + id + '-summary').text(summary);
       if (!hasChart) return;
       $('#' + id + '-canvas').attr('aria-label', 'Bar chart: ' + summary);
-      var data = { labels: labels, datasets: [{ label: label, data: values, backgroundColor: id === 'reg' ? '#2463EB' : '#172F43', hoverBackgroundColor: '#1B4FC2', borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 28 }] };
+      var data = { labels: labels, datasets: [{ label: label, data: values, backgroundColor: id === 'reg' ? '#2463EB' : '#172F43', hoverBackgroundColor: '#1B4FC2', borderRadius: 0, maxBarThickness: 28 }] };
       if (charts[id]) { charts[id].data = data; charts[id].update(); return; }
       Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.color = '#4F5D6B';
       charts[id] = new Chart(document.getElementById(id + '-canvas'), { type: 'bar', data: data, options: { responsive: true, maintainAspectRatio: false,
         animation: { duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300 },
         plugins: { legend: { display: false }, tooltip: { backgroundColor: '#172F43', padding: 10, cornerRadius: 6, displayColors: false } },
-        scales: { x: { grid: { display: false }, border: { color: '#E6E8EC' } }, y: { beginAtZero: true, grid: { color: '#E6E8EC' }, border: { display: false }, ticks: { precision: 0 } } } } });
+        scales: { x: { grid: { display: false }, border: { color: '#858C96' } }, y: { beginAtZero: true, grid: { color: '#E3E7EC' }, border: { display: false }, ticks: { precision: 0 } } } } });
     }
 
     function render(stats, events, perEvent, drafts) {
@@ -209,7 +209,7 @@
         '<section class="card panel lg:col-span-3" aria-labelledby="ud-up"><div class="panel-head"><h2 id="ud-up">Your upcoming events</h2><a class="text-link text-sm" href="my-registrations.html">View all</a></div><ul id="ud-upcoming" class="event-rows">' + Ui.skeletonRows(3) + '</ul></section>' +
         '<section class="card panel lg:col-span-2" aria-labelledby="ud-updates"><div class="panel-head"><h2 id="ud-updates">Updates</h2><button type="button" id="ud-markall" class="text-link text-sm" hidden>Mark all read</button></div><ul id="ud-notes" class="space-y-1">' + Ui.skeletonRows(3) + '</ul></section>' +
       '</div>' +
-      '<section class="mt-10" aria-labelledby="ud-disc"><div class="section-heading"><h2 id="ud-disc" class="!text-xl">Discover events</h2><a class="text-link text-sm" href="events.html">Browse all</a></div><div id="ud-discover" class="card-grid">' + Ui.skeletonCards(3) + '</div></section>');
+      '<section class="mt-8" aria-labelledby="ud-disc"><div class="section-heading"><h2 id="ud-disc">Discover events</h2><a class="text-link text-sm" href="events.html">Browse all</a></div><div id="ud-discover" class="card-grid">' + Ui.skeletonCards(3) + '</div></section>');
 
     var regs = [], events = [];
     function stat(i, v) { $('#ud-stats .ss-value').eq(i).text(v); }

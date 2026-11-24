@@ -50,6 +50,7 @@
     mail: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
     lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    upload: '<path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
     refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
     star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
     external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
@@ -249,22 +250,23 @@
   };
 
   Ui.emptyState = function (opts) {
-    return '<div class="text-center py-14 px-4 col-span-full">' +
-      '<div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-50 text-brand-700">' + Ui.icon(opts.icon || 'inbox', 'w-7 h-7') + '</div>' +
-      '<h3 class="font-display text-xl font-semibold">' + Ui.escape(opts.title || 'Nothing here yet') + '</h3>' +
-      (opts.message ? '<p class="mt-1 text-muted">' + Ui.escape(opts.message) + '</p>' : '') +
-      (opts.actionHtml ? '<div class="mt-5">' + opts.actionHtml + '</div>' : '') +
+    // Same look as Components.empty (css: .empty-panel): neutral icon, short title, one line, next action.
+    return '<div class="empty-panel col-span-full">' +
+      '<div class="empty-icon">' + Ui.icon(opts.icon || 'inbox', 'w-5 h-5') + '</div>' +
+      '<h3>' + Ui.escape(opts.title || 'Nothing here yet') + '</h3>' +
+      (opts.message ? '<p>' + Ui.escape(opts.message) + '</p>' : '') +
+      (opts.actionHtml ? '<div>' + opts.actionHtml + '</div>' : '') +
       '</div>';
   };
 
   /** Error block with a Retry button. Returns a jQuery element. */
   Ui.errorState = function (opts) {
     var $el = $(
-      '<div class="text-center py-14 px-4 col-span-full" role="alert">' +
-        '<div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-700">' + Ui.icon('alert', 'w-7 h-7') + '</div>' +
-        '<h3 class="font-display text-xl font-semibold">' + Ui.escape(opts.title || 'Something went wrong') + '</h3>' +
-        '<p class="mt-1 text-muted">' + Ui.escape(opts.message || 'Please try again.') + '</p>' +
-        (opts.onRetry ? '<button type="button" class="btn btn-secondary mt-5" data-retry>' + Ui.icon('refresh', 'w-4 h-4') + ' Try again</button>' : '') +
+      '<div class="error-panel col-span-full" role="alert">' +
+        '<div class="error-icon">' + Ui.icon('alert', 'w-5 h-5') + '</div>' +
+        '<h3>' + Ui.escape(opts.title || 'Something went wrong') + '</h3>' +
+        '<p>' + Ui.escape(opts.message || 'Please try again.') + '</p>' +
+        (opts.onRetry ? '<button type="button" class="btn btn-secondary" data-retry>' + Ui.icon('refresh', 'w-4 h-4') + ' Try again</button>' : '') +
       '</div>'
     );
     if (opts.onRetry) $el.find('[data-retry]').on('click', opts.onRetry);
@@ -277,7 +279,7 @@
     $('#main').html(
       '<section class="mx-auto max-w-xl px-4 py-20 text-center">' +
         '<div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-amber-700">' + Ui.icon('lock', 'w-8 h-8') + '</div>' +
-        '<h1 class="font-display text-3xl font-semibold" tabindex="-1" id="forbidden-title">You don\'t have access to this page</h1>' +
+        '<h1 class="t-page" tabindex="-1" id="forbidden-title">You don\'t have access to this page</h1>' +
         '<p class="mt-3 text-muted">This area is for administrators only. If you think you should have access, please contact an administrator.</p>' +
         '<div class="mt-7 flex flex-wrap justify-center gap-3">' +
           '<a class="btn btn-primary" href="' + home + '">Go back home</a>' +
@@ -301,7 +303,7 @@
         '<div class="fixed inset-0 z-[90] flex items-center justify-center p-4">' +
           '<div class="absolute inset-0 bg-black/50" data-dismiss></div>' +
           '<div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" role="alertdialog" aria-modal="true" aria-labelledby="cf-title" aria-describedby="cf-msg">' +
-            '<h2 id="cf-title" class="font-display text-xl font-semibold">' + Ui.escape(opts.title || 'Are you sure?') + '</h2>' +
+            '<h2 id="cf-title" class="t-card-title">' + Ui.escape(opts.title || 'Are you sure?') + '</h2>' +
             '<p id="cf-msg" class="mt-2 text-muted">' + Ui.escape(opts.message || '') + '</p>' +
             '<div class="mt-6 flex justify-end gap-3">' +
               '<button type="button" class="btn btn-secondary" data-cancel>Cancel</button>' +

@@ -93,7 +93,7 @@
 
   var STATUS = {
     live: { label: 'Happening now', icon: 'clock', chip: 'chip-success' },
-    today: { label: 'Today', icon: 'clock', chip: 'chip-coral' },
+    today: { label: 'Today', icon: 'clock', chip: 'chip-blue' }, // needs attention -> accent, not danger red
     upcoming: { label: 'Upcoming', icon: 'calendar', chip: 'chip-muted' },
     completed: { label: 'Completed', icon: 'check', chip: 'chip-muted' },
     registered: { label: 'Registered', icon: 'userCheck', chip: 'chip-blue' },

@@ -20,7 +20,7 @@
     if (!boot('My profile', '', 'profile')) return;
     put('<div class="sr-only" role="status">Loading…</div><div class="card form-card space-y-3" aria-hidden="true"><div class="skeleton h-5 w-1/3"></div><div class="skeleton h-10 w-full"></div><div class="skeleton h-10 w-full"></div></div>');
     Api.get('/users/profile/me').done(function (r) {
-      var u = r.data || {}, H2 = 'font-display text-xl font-semibold text-brand-900';
+      var u = r.data || {}, H2 = 't-card-title';
       put('<div class="grid max-w-4xl gap-6 md:grid-cols-5">' +
         '<section class="card p-6 md:col-span-2" aria-labelledby="acct-title"><h2 id="acct-title" class="' + H2 + '">Account</h2>' +
           '<dl class="mt-4 space-y-4 text-sm">' +

@@ -111,40 +111,70 @@
         (hint ? '<p id="f-' + name + '-hint" class="mt-1 text-sm text-muted">' + hint + '</p>' : '') +
         '<p data-error id="f-' + name + '-error" class="field-error hidden"></p></div>';
     }
+    // Same "(optional)" marker on every optional field; required fields carry no marker.
+    var OPT = ' <span class="label-optional">(optional)</span>';
     function text(name, label, required, tag) {
       var attrs = ' class="input" id="f-' + name + '" name="' + name + '"' + (required ? ' required aria-required="true"' : '');
-      return field(name, label + (required ? '' : ' <span class="text-muted">(optional)</span>'), tag === 'textarea' ? '<textarea' + attrs + ' rows="4"></textarea>' : '<input' + attrs + ' type="' + (tag || 'text') + '">');
+      return field(name, label + (required ? '' : OPT), tag === 'textarea' ? '<textarea' + attrs + ' rows="4"></textarea>' : '<input' + attrs + ' type="' + (tag || 'text') + '">');
     }
-    var fields = text('title', 'Title', true);
-    if (type === 'events') fields += text('description', 'Description', false, 'textarea') + text('location', 'Location', true) +
-      '<div class="two-col">' + text('starts_at', 'Starts at', true, 'datetime-local') + text('ends_at', 'Ends at', true, 'datetime-local') + '</div>';
-    if (type === 'promos') fields += text('description', 'Description', true, 'textarea') + text('caption_text', 'Captions (English)', true, 'textarea');
+    /** Form section card with a short heading (Details, Date and place, Captions, Media). */
+    function section(key, title, body) {
+      return '<section class="card form-section" aria-labelledby="sec-' + key + '"><h2 id="sec-' + key + '" class="form-section-title">' + title + '</h2>' + body + '</section>';
+    }
+    var sections = section('details', 'Details', text('title', 'Title', true) +
+      (type === 'events' ? text('description', 'Description', false, 'textarea') : '') +
+      (type === 'promos' ? text('description', 'Description', true, 'textarea') : ''));
+    if (type === 'events') sections += section('schedule', 'Date and place', text('location', 'Location', true) +
+      '<div class="two-col">' + text('starts_at', 'Starts', true, 'datetime-local') + text('ends_at', 'Ends', true, 'datetime-local') + '</div>');
+    if (type === 'promos') sections += section('captions', 'Captions', text('caption_text', 'English captions', true, 'textarea'));
 
     var fileLabel = { image: 'Event image', audio: 'Audio file', video: 'Video file' }[CFG.kind];
-    var fileHint = 'Allowed: ' + rule.exts.join(', ') + '. Maximum ' + rule.maxMB + ' MB.' + (isEdit ? ' Leave empty to keep the current file.' : '');
+    var exts = rule.exts.map(function (x) { return x.toUpperCase(); });
+    var fileHint = exts.slice(0, -1).join(', ') + ' or ' + exts[exts.length - 1] + ', up to ' + rule.maxMB + ' MB.' + (isEdit ? ' Leave empty to keep the current file.' : '');
+    // Drop area: the real <input type="file"> stays in the DOM, covers the area invisibly (click, drag-and-drop
+    // and keyboard focus all go to it) and keeps its id, name, accept, required and error wiring.
     var fileBlock = (!isEdit || CFG.fileOnEdit)
-      ? field('file', fileLabel + (isEdit ? ' <span class="text-muted">(optional)</span>' : ''),
-          '<input class="input" type="file" id="f-file" name="' + CFG.kind + '" accept="' + rule.exts.map(function (x) { return '.' + x; }).join(',') + '" aria-describedby="f-file-hint"' + (isEdit ? '' : ' required aria-required="true"') + '>', fileHint)
-      : '<div><p class="label">Audio file</p><p class="text-sm text-muted">The audio of an existing announcement can\'t be replaced (the API keeps the original file). Create a new announcement to publish different audio.</p></div>';
+      ? '<div data-field><p class="label" id="f-file-title">' + fileLabel + (isEdit ? OPT : '') + '</p>' +
+          '<div class="dropzone">' +
+            '<input type="file" id="f-file" name="' + CFG.kind + '" class="dropzone-input" accept="' + rule.exts.map(function (x) { return '.' + x; }).join(',') + '" aria-labelledby="f-file-title" aria-describedby="f-file-hint"' + (isEdit ? '' : ' required aria-required="true"') + '>' +
+            '<span class="dropzone-icon" aria-hidden="true">' + Ui.icon('upload', 'w-5 h-5') + '</span>' +
+            '<span class="dropzone-text" aria-hidden="true"><span class="dropzone-cta">Choose a file</span> or drag it here</span>' +
+            '<span class="dropzone-file" aria-live="polite"></span>' +
+          '</div>' +
+          '<p id="f-file-hint" class="mt-1 text-sm text-muted">' + fileHint + '</p>' +
+          '<p data-error id="f-file-error" class="field-error hidden"></p></div>'
+      : '<div><p class="label">Audio file</p><p class="text-sm text-muted">Audio can\'t be changed after an announcement is created. To use different audio, create a new announcement.</p></div>';
     var publishBlock = CFG.publishable
-      ? '<div class="flex items-start gap-3 rounded-xl border border-brand-100 bg-brand-50 p-4"><input type="checkbox" role="switch" id="f-published" class="mt-1 h-5 w-5 accent-[#2463EB]" checked aria-describedby="f-published-hint">' +
-        '<div><label for="f-published" class="font-semibold">Published</label><p id="f-published-hint" class="text-sm text-muted">When on, everyone can see this ' + CFG.label + '. Turn off to keep it as a hidden draft.</p></div></div>'
-      : '<p class="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm text-muted">Events are visible to everyone as soon as they are saved. The API has no draft state for events.</p>';
+      ? '<div class="flex items-start gap-3"><input type="checkbox" role="switch" id="f-published" class="mt-0.5" checked aria-describedby="f-published-hint">' +
+        '<div><label for="f-published" class="font-semibold">Published</label><p id="f-published-hint" class="text-sm text-muted">Everyone can see this ' + CFG.label + '. Turn off to keep it as a hidden draft.</p></div></div>'
+      : '<p class="flex items-start gap-2 text-sm text-muted">' + Ui.icon('info', 'mt-0.5 w-4 h-4 shrink-0') + 'Events go live as soon as you save them.</p>';
 
-    put('<div class="form-card card"><form id="content-form" novalidate>' + fields + fileBlock +
-      '<div id="file-preview" class="hidden" aria-live="polite"></div>' + publishBlock +
-      '<div id="upload-progress" class="hidden"><div class="mb-1 flex justify-between text-sm font-semibold"><span id="upload-label">Uploading…</span><span id="upload-pct">0%</span></div>' +
-        '<div class="h-2.5 overflow-hidden rounded-full bg-brand-100" role="progressbar" aria-labelledby="upload-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="upload-bar" class="h-full bg-brand-700 transition-all" style="width:0%"></div></div></div>' +
-      '<div id="form-alert" class="hidden"></div>' +
-      '<div class="flex flex-wrap gap-3"><button class="btn btn-primary" type="submit"' + (isEdit ? ' disabled' : '') + '>' + (isEdit ? 'Save changes' : 'Create ' + CFG.label) + '</button><a class="btn btn-ghost" href="' + type + '.html">Cancel</a></div>' +
-    '</form></div>');
+    // Two columns on wide screens: sections on the left, a sticky panel on the right with the
+    // summary/preview, publishing and the only primary action. One column on smaller screens.
+    put('<form id="content-form" class="admin-form" novalidate>' +
+      '<div class="admin-form-main">' + sections + section('media', { image: 'Image', audio: 'Audio', video: 'Video' }[CFG.kind], fileBlock) + '</div>' +
+      '<aside class="admin-form-side" aria-label="Summary and actions"><div class="card form-side-card">' +
+        '<h2 class="form-section-title">Summary</h2>' +
+        '<dl class="form-summary">' +
+          '<div><dt>Title</dt><dd id="sum-title"></dd></div>' +
+          (type === 'events' ? '<div><dt>When</dt><dd id="sum-when"></dd></div><div><dt>Where</dt><dd id="sum-where"></dd></div>' : '') +
+          '<div><dt>File</dt><dd id="sum-file"></dd></div>' +
+        '</dl>' +
+        '<div id="file-preview" class="hidden" aria-live="polite"></div>' +
+        '<div class="form-side-block"><h2 class="form-section-title">Publishing</h2>' + publishBlock + '</div>' +
+        '<div id="upload-progress" class="hidden"><div class="mb-1 flex justify-between text-sm font-semibold"><span id="upload-label">Uploading…</span><span id="upload-pct">0%</span></div>' +
+          '<div class="h-2 overflow-hidden rounded-full bg-subtle" role="progressbar" aria-labelledby="upload-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="upload-bar" class="h-full bg-brand-700 transition-all" style="width:0%"></div></div></div>' +
+        '<div id="form-alert" class="hidden"></div>' +
+        '<div class="form-actions"><button class="btn btn-primary" type="submit"' + (isEdit ? ' disabled' : '') + '>' + (isEdit ? 'Save changes' : 'Create ' + CFG.label) + '</button><a class="btn btn-ghost" href="' + type + '.html">Cancel</a></div>' +
+      '</div></aside>' +
+    '</form>');
     var $form = $('#content-form'), $submit = $form.find('[type=submit]');
 
     /* ---------- Promo captions: plain text or timed subtitles (see C.captionsUrl) ---------- */
     if (type === 'promos') {
-      $('#f-caption_text').attr({ rows: 8, 'aria-describedby': 'f-caption_text-hint', spellcheck: 'true' })
-        .after('<p id="f-caption_text-hint" class="mt-1 text-sm text-muted">Type what is said in the video, and the captions are timed across it automatically. ' +
-          'For exact timing, paste subtitles in SRT or WebVTT format instead (lines like <code>00:00:01,000 --&gt; 00:00:04,000</code>), for example exported from YouTube Studio or a free subtitle tool.</p>' +
+      $('#f-caption_text').attr({ rows: 4, 'aria-describedby': 'f-caption_text-hint', spellcheck: 'true' })
+        .after('<p id="f-caption_text-hint" class="mt-1 text-sm text-muted">Type what is said in the video and the captions are timed automatically. ' +
+          'For exact timing, paste a subtitle file instead (SRT or VTT, for example from YouTube Studio).</p>' +
           '<p id="f-caption_text-mode" class="mt-1 text-sm font-semibold text-brand-800" aria-live="polite"></p>');
       // Live feedback on which mode the text will use.
       $form.on('input', '#f-caption_text', Ui.debounce(function () {
@@ -152,6 +182,26 @@
         $('#f-caption_text-mode').text(!v ? '' : timed ? (n ? 'Timed subtitles detected: ' + n + ' caption' + (n === 1 ? '' : 's') + '.' : 'This looks like subtitles, but no caption could be read. Check the timing lines.') : 'Plain text: captions will be timed automatically.');
       }, 250));
     }
+
+    /* ---------- Presentation only: drop area + summary panel mirror the form (no effect on saving) ---------- */
+    function updateDropzone() {
+      var f = $('#f-file')[0], file = f && f.files && f.files[0];
+      $('.dropzone').toggleClass('has-file', !!file);
+      $('.dropzone-file').text(file ? file.name + ' · ' + size(file.size) : '');
+    }
+    function updateSummary() {
+      var f = $('#f-file')[0], file = f && f.files && f.files[0], start = $('#f-starts_at').val();
+      var current = original && (original.audio_url || original.video_url || (type === 'events' && C.eventImage(original)));
+      $('#sum-title').text($('#f-title').val().trim() || 'Not set yet').toggleClass('is-empty', !$('#f-title').val().trim());
+      $('#sum-when').text(start ? Ui.formatDateTime(start) : 'Not set yet').toggleClass('is-empty', !start);
+      $('#sum-where').text($('#f-location').val() ? $('#f-location').val().trim() : 'Not set yet').toggleClass('is-empty', !$('#f-location').val());
+      $('#sum-file').text(file ? file.name : current ? 'Current file kept' : 'No file chosen').toggleClass('is-empty', !file && !current);
+    }
+    // Run after the validation handler (it may clear an invalid file), hence the timeout.
+    $('#f-file').on('change', function () { setTimeout(function () { updateDropzone(); updateSummary(); }, 0); });
+    $('.dropzone').on('dragenter dragover', function () { $(this).addClass('is-drag'); }).on('dragleave drop', function () { $(this).removeClass('is-drag'); });
+    $form.on('input change', 'input:not([type=file]), textarea', updateSummary);
+    updateSummary();
 
     /* ---------- Dates: datetime-local <-> ISO (keep the admin's local time zone) ---------- */
     function toLocalInput(v) {
@@ -179,7 +229,7 @@
     function existingPreview() {
       if (!original) return showPreview('');
       var img = type === 'events' && C.eventImage(original);
-      if (img) return showPreview('<p class="label">Current image</p><img src="' + Ui.escape(img) + '" alt="Current image for ' + Ui.escape(original.title) + '" class="max-h-56 rounded-xl border border-brand-100 object-cover">');
+      if (img) return showPreview('<p class="label">Current image</p><img src="' + Ui.escape(img) + '" alt="Current image for ' + Ui.escape(original.title) + '" class="max-h-56 rounded-xl border border-line object-cover">');
       var media = original.audio_url || original.video_url;
       showPreview(media ? '<p class="text-sm text-muted">Current file: <a class="underline" href="' + Ui.escape(media) + '" target="_blank" rel="noopener">' + Ui.escape(media.split('/').pop()) + '</a></p>' : '');
     }
@@ -193,8 +243,8 @@
       var info = '<p class="text-sm"><span class="font-semibold">' + Ui.escape(file.name) + '</span> <span class="text-muted">· ' + size(file.size) + '</span></p>';
       if (CFG.kind === 'image') {
         previewUrl = URL.createObjectURL(file);
-        showPreview('<p class="label">Preview</p><img src="' + previewUrl + '" alt="Preview of the selected image" class="max-h-56 rounded-xl border border-brand-100 object-cover">' + info);
-      } else showPreview('<div class="flex items-center gap-3 rounded-xl border border-brand-100 p-3">' + Ui.icon(CFG.kind, 'w-6 h-6 text-brand-700') + info + '</div>');
+        showPreview('<p class="label">Preview</p><img src="' + previewUrl + '" alt="Preview of the selected image" class="max-h-56 rounded-xl border border-line object-cover">' + info);
+      } else showPreview('<div class="flex items-center gap-3 rounded-xl bg-subtle p-3">' + Ui.icon(CFG.kind, 'w-5 h-5 text-muted') + info + '</div>');
     });
 
     /* ---------- Edit mode: load the current values ---------- */
@@ -205,6 +255,7 @@
         $('#f-starts_at').val(toLocalInput(original.starts_at)); $('#f-ends_at').val(toLocalInput(original.ends_at));
         $('#f-published').prop('checked', original.published !== false);
         existingPreview();
+        updateSummary(); // presentation: show the loaded values in the summary panel
         $submit.prop('disabled', false);
       }).fail(function (err) {
         Ui.formAlert($('#form-alert'), 'Couldn\'t load this ' + CFG.label + ': ' + err.message + ' Reload the page to try again.', 'error');

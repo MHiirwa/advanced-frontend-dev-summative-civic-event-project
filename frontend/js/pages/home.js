@@ -12,10 +12,42 @@
   if (!Layout.init({ access: 'public', active: 'home' })) return;
   var signedIn = Auth.isLoggedIn();
 
-  // ROLE GUARD (UX only): guests get a sign-up action next to Explore; signed-in users don't need it.
-  if (!signedIn) $('#hero-actions').append('<a class="btn btn-secondary" href="signup.html">Create an account</a>');
+  var $explore = $('#hero-actions .btn-primary'); // "Explore upcoming events"
 
-  var next = Civic.nextUmuganda();
+  if (!signedIn) {
+    // ROLE GUARD (UX only): guests get a sign-up action next to Explore; signed-in users don't need it.
+    $('#hero-actions').append('<a class="btn btn-secondary" href="signup.html">Create an account</a>');
+    // Events need a login: send guests to the login page with a message, and bring them back to
+    // the events page afterwards (login.js reads this same-site path via Auth.takeReturnUrl()).
+    $explore.attr('href', 'login.html').on('click', function (e) {
+      e.preventDefault();
+      var eventsPath = window.location.pathname.replace(/[^/]*$/, '') + 'pages/events.html';
+      try { sessionStorage.setItem('ce_return_to', eventsPath); } catch (err) { /* storage blocked: login falls back to the home page */ }
+      Ui.flash('Log in to see upcoming events', 'info');
+      window.location.href = 'login.html';
+    });
+  } else {
+    // Already signed in: no sign-up / log-in prompts; the main action goes straight to the app.
+    $('#app-header, #main').find('a[href$="signup.html"], a[href$="login.html"]').remove();
+    if (Auth.isAdmin()) $explore.text('Go to dashboard').attr('href', 'admin/dashboard.html');
+    else $explore.text('Go to events').attr('href', 'pages/events.html');
+  }
+
+  /**
+   * Next general Umuganda: the last Saturday of the current month, or of next month when today
+   * is already after it. Dates are compared by calendar day in the visitor's time zone.
+   */
+  function lastSaturday(year, month) {
+    var d = new Date(year, month + 1, 0);           // last day of `month`
+    d.setDate(d.getDate() - ((d.getDay() + 1) % 7)); // step back to Saturday (getDay() 6)
+    return d;
+  }
+  function nextUmuganda(today) {
+    var t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    var d = lastSaturday(t.getFullYear(), t.getMonth());
+    return t > d ? lastSaturday(t.getFullYear(), t.getMonth() + 1) : d; // Date handles month 12 -> January
+  }
+  var next = nextUmuganda(new Date());
   $('#umuganda-note').html('<span class="umuganda-dot" aria-hidden="true"></span><strong>Next Umuganda: ' +
     Ui.escape(next.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) +
     '</strong><span class="text-muted">· confirm with your local sector</span>');

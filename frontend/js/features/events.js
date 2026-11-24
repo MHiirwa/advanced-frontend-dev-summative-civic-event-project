@@ -28,7 +28,7 @@
       if (Auth.isAdmin()) App.actions('<a class="btn btn-primary btn-sm" href="../admin/create-event.html">' + Ui.icon('plus', 'w-4 h-4') + 'Create event</a>');
       // Mobile-first: on phones the filters sit behind a "Filters" button (with the number of active
       // filters) so the results are visible without scrolling; from 641px up they are always shown.
-      put('<form id="event-filters" class="card p-4" role="search" aria-label="Filter events" novalidate>' +
+      put('<form id="event-filters" class="card p-4 sm:p-6" role="search" aria-label="Filter events" novalidate>' +
           '<button type="button" id="filters-toggle" class="filters-toggle btn btn-secondary btn-sm w-full justify-between" aria-expanded="false" aria-controls="filters-body">' +
             '<span class="inline-flex items-center gap-2">' + Ui.icon('search', 'w-4 h-4') + 'Search &amp; filters</span><span id="filters-active" class="chip chip-blue" hidden></span></button>' +
           '<div id="filters-body" class="filters-body">' +
@@ -122,7 +122,7 @@
     // all feedback and the average (admin-only endpoints); users get Register/Cancel and their own feedback.
     var isAdmin = Auth.isAdmin();
     var ev = null;
-    var H2 = 'font-display text-xl font-semibold text-brand-900';
+    var H2 = 't-card-title';
 
     function skeleton() {
       return '<div class="sr-only" role="status">Loading event…</div><div class="grid gap-6 lg:grid-cols-3" aria-hidden="true">' +
@@ -137,8 +137,8 @@
     function stars(n) {
       n = Math.max(0, Math.min(5, Number(n) || 0));
       var label = (Math.round(n * 10) / 10) + ' out of 5 stars';
-      return '<span class="stars relative inline-block whitespace-nowrap" aria-hidden="true"><span>☆☆☆☆☆</span>' +
-        '<span class="absolute inset-y-0 left-0 overflow-hidden" style="width:' + (n / 5 * 100) + '%">★★★★★</span></span><span class="sr-only">' + label + '</span>';
+      // Same Lucide stars as everywhere else (Components.stars); `label` is kept for the screen-reader text.
+      return C.stars(n) || '<span class="sr-only">' + label + '</span>';
     }
     function when(v) { return v ? '<time datetime="' + Ui.escape(v) + '">' + Ui.escape(Ui.formatDateTime(v)) + '</time>' : 'To be announced'; }
 
@@ -170,7 +170,7 @@
               '<p class="mt-3 whitespace-pre-line leading-relaxed">' + Ui.escape(ev.description || 'No description has been provided for this event.') + '</p>' +
             '</div>' +
           '</article>' +
-          '<aside class="space-y-6" aria-label="Event information">' +
+          '<aside class="order-first space-y-6 lg:order-none" aria-label="Event information">' +
             '<section class="card p-6" aria-labelledby="when-title"><h2 id="when-title" class="' + H2 + '">When &amp; where</h2>' +
               '<dl class="mt-4 space-y-3 text-sm">' +
                 '<div><dt class="font-semibold text-muted">Starts</dt><dd>' + when(ev.starts_at) + '</dd></div>' +
@@ -247,7 +247,7 @@
     }
     function showMyFeedback(f) {
       $('#feedback-body').html(
-        '<div class="rounded-xl bg-brand-50 p-4"><p class="text-lg">' + stars(f.rating) + '</p>' +
+        '<div class="rounded-xl bg-subtle p-4"><p>' + stars(f.rating) + '</p>' +
         '<p class="mt-2 whitespace-pre-line">' + Ui.escape(f.comment || 'No comment.') + '</p>' +
         ((f.updated_at || f.created_at) ? '<p class="mt-2 text-xs text-muted">Submitted ' + Ui.escape(Ui.timeAgo(f.updated_at || f.created_at)) + '</p>' : '') + '</div>' +
         '<button type="button" id="edit-fb" class="btn btn-secondary btn-small mt-4 inline-flex items-center gap-1">' + Ui.icon('edit', 'w-4 h-4') + ' Edit feedback</button>');
@@ -259,7 +259,7 @@
         '<form id="fb-form" class="space-y-4" novalidate>' +
           '<fieldset data-field><legend class="label">Rating</legend><div class="mt-1 flex flex-wrap gap-2">' +
             [1, 2, 3, 4, 5].map(function (n) {
-              return '<label class="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-brand-100 px-3 py-2 hover:bg-brand-50"><input type="radio" name="rating" value="' + n + '"' + (n === r ? ' checked' : '') + '> ' + n + ' ★</label>';
+              return '<label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-2 font-semibold hover:border-line-strong hover:bg-subtle has-[:checked]:border-brand-700 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-800"><input type="radio" name="rating" value="' + n + '"' + (n === r ? ' checked' : '') + '> ' + n + Ui.icon('star', 'w-4 h-4') + '<span class="sr-only"> out of 5</span></label>';
             }).join('') +
           '</div><p data-error id="rating-error" class="field-error hidden"></p></fieldset>' +
           '<div data-field><label class="label" for="fb-comment">Comment <span class="text-muted">(optional)</span></label>' +
@@ -302,12 +302,12 @@
             '<div class="grid gap-4 sm:grid-cols-3">' +
               '<div class="stat-card card"><p class="muted">Registrants</p><strong>' + att.length + '</strong></div>' +
               '<div class="stat-card card"><p class="muted">Feedback entries</p><strong>' + fb.length + '</strong></div>' +
-              '<div class="stat-card card"><p class="muted">Average rating</p><strong>' + (avg == null ? '—' : avg.toFixed(1) + ' / 5') + '</strong>' + (avg == null ? '' : '<p class="text-lg">' + stars(avg) + '</p>') + '</div>' +
+              '<div class="stat-card card"><p class="muted">Average rating</p><strong>' + (avg == null ? '—' : avg.toFixed(1) + ' / 5') + '</strong>' + (avg == null ? '' : '<p class="mt-1">' + stars(avg) + '</p>') + '</div>' +
             '</div>' +
-            '<h3 class="mt-8 font-display text-lg font-semibold">Registrants</h3><div class="mt-3">' +
+            '<h3 class="mt-8 t-card-title">Registrants</h3><div class="mt-3">' +
               (att.length ? C.table(['Name', 'Email', 'Registered'], att.map(function (a) { return '<tr><td>' + Ui.escape(a.full_name) + '</td><td>' + Ui.escape(a.email) + '</td><td>' + Ui.escape(Ui.formatDateTime(a.created_at || a.registered_at)) + '</td></tr>'; }).join(''))
                           : C.empty('No registrants yet', 'Active registrations will appear here.')) + '</div>' +
-            '<h3 class="mt-8 font-display text-lg font-semibold">Feedback</h3><div class="mt-3">' +
+            '<h3 class="mt-8 t-card-title">Feedback</h3><div class="mt-3">' +
               (fb.length ? '<ul class="stack-list">' + fb.map(function (f) { return '<li class="card p-4"><div class="flex flex-wrap items-center justify-between gap-2"><strong>' + Ui.escape(f.full_name) + '</strong><span>' + stars(f.rating) + '</span></div><p class="mt-2 whitespace-pre-line">' + Ui.escape(f.comment || 'No comment.') + '</p><p class="mt-1 text-xs text-muted">' + Ui.escape(Ui.timeAgo(f.created_at)) + '</p></li>'; }).join('') + '</ul>'
                          : C.empty('No feedback yet', 'Feedback from attendees will appear here.')) + '</div>');
         }).fail(function (err) {
