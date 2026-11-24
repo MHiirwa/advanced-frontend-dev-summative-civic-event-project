@@ -181,14 +181,20 @@
   Ui.setFieldError = function ($input, message) {
     var $wrap = $input.closest('[data-field]');
     var $err = $wrap.find('[data-error]').first();
+    var errId = $err.attr('id');
+    // Remember the field's own hints (e.g. password rules) once, so an error is ADDED to them
+    // instead of replacing them, and they come back when the error clears.
+    if ($input.data('base-describedby') == null) $input.data('base-describedby', $input.attr('aria-describedby') || '');
+    var base = String($input.data('base-describedby')).split(/\s+/).filter(function (x) { return x && x !== errId; });
     if (message) {
       $err.text(message).removeClass('hidden');
       $input.attr('aria-invalid', 'true');
-      if ($err.attr('id')) $input.attr('aria-describedby', $err.attr('id'));
+      if (errId) $input.attr('aria-describedby', [errId].concat(base).join(' '));
       $input.addClass('input-error');
     } else {
       $err.text('').addClass('hidden');
       $input.removeAttr('aria-invalid').removeClass('input-error');
+      if (base.length) $input.attr('aria-describedby', base.join(' ')); else $input.removeAttr('aria-describedby');
     }
   };
   Ui.clearFieldErrors = function ($form) {
