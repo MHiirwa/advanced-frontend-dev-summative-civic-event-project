@@ -58,13 +58,39 @@
       if (parts.length) message = parts.join(' ');
     }
 
+    // 5xx bodies can carry internal details (SQL constraint names, stack-ish text). Never show
+    // those to people: translate the few we can recognise and use a generic message otherwise.
+    var serverDetail = null;
+    if (status >= 500) {
+      serverDetail = message;
+      message = friendlyServerMessage(message);
+    }
+
     if (!message) {
       message = DEFAULT_MESSAGES[status] ||
         (status >= 500 ? DEFAULT_MESSAGES[500] : 'Something went wrong. Please try again.');
       if (textStatus === 'timeout') message = 'The request took too long. Please try again.';
     }
 
-    return { status: status, message: message, errors: errors, fieldErrors: fieldErrors, isNetwork: status === 0, raw: body };
+    return { status: status, message: message, errors: errors, fieldErrors: fieldErrors, isNetwork: status === 0, raw: body, serverDetail: serverDetail };
+  }
+
+  /**
+   * Known backend 500s, rewritten in plain language. The backend reports some client mistakes
+   * (upload limits, database constraints) as 500, so we recognise them by their message.
+   * Returns null when unknown, so the caller falls back to the generic 500 message.
+   */
+  function friendlyServerMessage(raw) {
+    var m = String(raw || '');
+    if (/file too large/i.test(m)) return DEFAULT_MESSAGES[413];
+    if (/^Only (image|video|audio) files are allowed/i.test(m)) return m + '.';
+    if (/foreign key constraint/i.test(m) && /event_registrations/i.test(m)) {
+      return 'This event has registrations (including cancelled ones), so it can\'t be deleted. Edit the event instead, for example to mark it as cancelled in its title or description.';
+    }
+    if (/foreign key constraint/i.test(m)) return 'This item is still linked to other records, so it can\'t be removed.';
+    if (/check constraint/i.test(m) && /rating/i.test(m)) return 'Ratings must be a whole number from 1 to 5.';
+    if (/check constraint|violates|invalid input syntax/i.test(m)) return DEFAULT_MESSAGES[400];
+    return null;
   }
 
   /* ---------- Cache (sessionStorage) ---------- */
@@ -178,6 +204,28 @@
     del: function (path, opts) { return request('DELETE', path, opts); },
     /** Multipart upload. method is 'POST' or 'PUT'. */
     upload: function (method, path, formData, opts) { return request(method, path, $.extend({ formData: formData }, opts)); },
+    /**
+     * Run request factories with at most `limit` in flight (default 4), so pages that need one
+     * call per item (admin dashboard, registrations overview) don't flood the API.
+     * Always resolves, with an array of { ok, value | error } in input order.
+     */
+    pool: function (factories, limit) {
+      var d = $.Deferred(), results = new Array(factories.length), next = 0, active = 0, done = 0;
+      limit = limit || 4;
+      if (!factories.length) return d.resolve(results).promise();
+      function launch() {
+        while (active < limit && next < factories.length) {
+          (function (i) {
+            active++;
+            $.when(factories[i]()).done(function () { results[i] = { ok: true, value: arguments.length > 1 ? $.makeArray(arguments) : arguments[0] }; })
+              .fail(function (err) { results[i] = { ok: false, error: err }; })
+              .always(function () { active--; done++; if (done === factories.length) d.resolve(results); else launch(); });
+          })(next++);
+        }
+      }
+      launch();
+      return d.promise();
+    },
     /** Convenience: show an API error as a toast. */
     toastError: function (err) { Ui.toast(err && err.message ? err.message : 'Something went wrong.', 'error'); }
   };
