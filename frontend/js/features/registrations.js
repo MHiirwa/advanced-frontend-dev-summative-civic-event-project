@@ -20,7 +20,8 @@
     function render() {
       var counts = { upcoming: 0, past: 0, cancelled: 0 }; rows.forEach(function (x) { counts[group(x)]++; });
       $('#reg-tabs').html(['upcoming', 'past', 'cancelled'].map(function (t) {
-        return '<button type="button" role="tab" class="seg' + (t === tab ? ' is-on' : '') + '" aria-selected="' + (t === tab) + '" data-tab="' + t + '">' + t.charAt(0).toUpperCase() + t.slice(1) + ' <span class="seg-count">' + counts[t] + '</span></button>';
+        // ARIA tabs: roving tabindex (only the selected tab is in the Tab order; arrows move between tabs).
+        return '<button type="button" role="tab" id="tab-' + t + '" class="seg' + (t === tab ? ' is-on' : '') + '" aria-selected="' + (t === tab) + '" aria-controls="reg-list" tabindex="' + (t === tab ? '0' : '-1') + '" data-tab="' + t + '">' + t.charAt(0).toUpperCase() + t.slice(1) + ' <span class="seg-count">' + counts[t] + '</span></button>';
       }).join(''));
       var list = rows.filter(function (x) { return group(x) === tab; }).sort(function (a, b) { return (new Date(a.starts_at) - new Date(b.starts_at)) * (tab === 'upcoming' ? 1 : -1); });
       $('#reg-list').html(list.length ? '<ul class="card event-rows px-4">' + list.map(function (x) {
@@ -37,10 +38,17 @@
         : C.empty(tab === 'upcoming' ? 'No upcoming registrations' : tab === 'past' ? 'No past events yet' : 'No cancelled registrations', tab === 'upcoming' ? 'Find an event and reserve your place.' : '', 'calendar'));
     }
     function load() {
-      put('<div id="reg-tabs" class="seg-group" role="tablist" aria-label="Registrations"></div><div id="reg-list" class="mt-4">' + Ui.skeletonRows(3) + '</div>');
+      put('<div id="reg-tabs" class="seg-group" role="tablist" aria-label="Registrations"></div><div id="reg-list" class="mt-4" role="tabpanel" tabindex="0" aria-labelledby="tab-' + tab + '">' + Ui.skeletonRows(3) + '</div>');
       Api.get('/event-registrations/my-registrations').done(function (r) { rows = r.data || []; render(); }).fail(fail);
     }
-    $('#page-content').on('click', '[data-tab]', function () { tab = $(this).attr('data-tab'); render(); $('[data-tab="' + tab + '"]').trigger('focus'); });
+    function selectTab(t) { tab = t; render(); $('#reg-list').attr('aria-labelledby', 'tab-' + tab); $('[data-tab="' + tab + '"]').trigger('focus'); }
+    $('#page-content').on('click', '[data-tab]', function () { selectTab($(this).attr('data-tab')); });
+    $('#page-content').on('keydown', '[role=tab]', function (e) {
+      var order = ['upcoming', 'past', 'cancelled'], i = order.indexOf(tab);
+      var next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: order.length - 1 }[e.key];
+      if (next === undefined) return;
+      e.preventDefault(); selectTab(order[(next + order.length) % order.length]);
+    });
     $('#page-content').on('click', '.cancel-registration', function () {
       var id = $(this).attr('data-id'), $b = $(this);
       Ui.confirm({ title: 'Cancel this registration?', message: 'You will not be able to register for this event again afterwards.', confirmText: 'Cancel registration', danger: true }).then(function (ok) {
@@ -104,7 +112,8 @@
             '<td><div class="row-actions"><a class="btn btn-secondary btn-sm" href="registrations.html?id=' + encodeURIComponent(e.id) + '">View</a></div></td></tr>';
         }).join('') + '</tbody></table></div>'
         : C.empty(events.length ? 'No events match' : 'No events yet', events.length ? 'Try another search or time filter.' : 'Registrations appear here once events exist.', 'calendar'));
-      list.forEach(fillCounts);
+      // Counts load at most 4 requests at a time instead of 2 per event all at once.
+      Api.pool(list.map(function (e) { return function () { return fillCounts(e); }; }), 4);
     }
     var counts = {};
     function fillCounts(e) {
@@ -115,9 +124,9 @@
         $('[data-fb="' + key + '"]').text(c.fb == null ? '—' : c.fb.length);
         $('[data-avg="' + key + '"]').html(c.fb && c.fb.length ? C.stars(avgOf(c.fb)) + ' <span class="ml-1 text-sm tabular-nums">' + avgOf(c.fb).toFixed(1) + '</span>' : '<span class="text-muted">—</span>');
       }
-      if (counts[key]) return paint();
+      if (counts[key]) { paint(); return null; }
       counts[key] = { pending: true };
-      $.when(Api.get('/event-registrations/event/' + encodeURIComponent(key) + '/attendees', null, { silent: true }), Api.get('/event-feedback/event/' + encodeURIComponent(key), null, { silent: true }))
+      return $.when(Api.get('/event-registrations/event/' + encodeURIComponent(key) + '/attendees', null, { silent: true }), Api.get('/event-feedback/event/' + encodeURIComponent(key), null, { silent: true }))
         .done(function (a, f) { counts[key] = { att: (a.data || []).length, fb: f.data || [] }; paint(); })
         .fail(function () { counts[key] = { att: null, fb: null }; paint(); });
     }
